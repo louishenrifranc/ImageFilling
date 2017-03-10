@@ -6,7 +6,7 @@ from tqdm import trange
 def read_and_decode(filename_queue,
                     batch_size,
                     flip=True,
-                    contrast=True):
+                    wrong_image=True):
     reader = tf.TFRecordReader()
 
     # Read a single example
@@ -82,6 +82,15 @@ def read_and_decode(filename_queue,
               caption2,
               caption3,
               caption4]
+
+    if wrong_image:
+        wrong_images = tf.train.shuffle_batch(
+            [image],
+            batch_size=1,
+            capacity=min_queue_examples + 3,
+            min_after_dequeue=min_queue_examples)
+        inputs.append(wrong_images[0])
+
     images = tf.train.shuffle_batch(
         inputs,
         batch_size=batch_size,
@@ -139,6 +148,12 @@ def get_mask_hiding(hiding_size=32, image_size=64):
     return mask
 
 
+def reconstructed_image(reconstructed_hole, true_image):
+    padded = tf.pad(tensor=reconstructed_hole, paddings=[[0, 0], [16, 16], [16, 16], [0, 0]])
+    return padded + tf.stack([1 - get_mask_hiding()] * true_image.get_shape().as_list()[0],
+                             axis=0) * true_image
+
+
 def restore(model, save_name="model/"):
     """
     Retrieve last model saved if possible
@@ -182,9 +197,3 @@ def train_epoch(model, saving_each_iter=10):
         os.makedirs("model")
     current_iter = model.sess.run(model.global_step)
     model.saver.save(model.sess, "model/model", global_step=current_iter)
-
-
-def reconstructed_image(reconstructed_hole, true_image):
-    padded = tf.pad(tensor=reconstructed_hole, paddings=[[0, 0], [16, 16], [16, 16], [0, 0]])
-    return padded + tf.stack([1 - get_mask_hiding()] * true_image.get_shape().as_list()[0],
-                             axis=0) * true_image

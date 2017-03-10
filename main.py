@@ -8,6 +8,9 @@ if __name__ == '__main__':
     parser.add_argument("--train_first_file", type=int, default=3, help="Number of the first training file")
     parser.add_argument("--train_set_size", type=int, default=3000, help="Number of training examples")
     parser.add_argument("--val_set", type=bool, default=False, help="Whether to use a validation set")
+    parser.add_argument("--train_with_gan", type=bool, default=True,
+                        help="Whether to train the model adding an adversarial cost")
+
     args = parser.parse_args()
 
     # Config default value
@@ -20,6 +23,7 @@ if __name__ == '__main__':
                            args.train_first_file +
                            args.train_set_size //
                            cfg.queue.nb_examples_per_file)]
+
     # Whether we create a validation set
     cfg.queue.is_val_set = args.val_set
     # Build model and train
