@@ -63,3 +63,9 @@ def cust_conv2d_transpose(input_layer, out_dim, h_f=3, w_f=3, h_s=2, w_s=2, padd
 def channel_wise_fc(input_layer):
     return cust_conv2d(input_layer, input_layer.shape[-1], h_f=1, w_f=1, h_s=1, w_s=1, batch_norm=False,
                        activation_fn=None)
+
+
+def add_summary_python_scalar(name, scalar):
+    return tf.Summary(value=[
+        tf.Summary.Value(tag=name, simple_value=scalar),
+    ])

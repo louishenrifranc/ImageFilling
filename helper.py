@@ -116,6 +116,8 @@ def create_queue(filename, batch_size):
     return read_and_decode(filename_queue, batch_size)
 
 
+
+
 def sample(mean, log_sigma):
     epsilon = tf.truncated_normal(tf.shape(mean))
     # emb_dim (100)

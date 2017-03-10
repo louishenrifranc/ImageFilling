@@ -1,36 +1,33 @@
 import tensorflow as tf
 import tensorflow.contrib.layers as ly
-from config import cfg
 import helper
 import tf_utils
 
 
 class Graph:
-    def __init__(self):
+    def __init__(self, cfg):
         self.batch_size = cfg.train.batch_size
         self.nb_epochs = cfg.train.nb_epochs
 
+        self.optimizer = cfg.train.optimizer
         # Placeholder
         self.is_training = tf.placeholder(tf.bool)
+
+        # Global step
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
 
+        # Input filename
+        self.__filename = cfg.trai.filename
         self.sess = tf.Session()
 
     def _inputs(self):
-        input_to_graph = helper.create_queue("train4", self.batch_size)
+        input_to_graph = helper.create_queue(self.__filename, self.batch_size)
         # test_queue = helper.create_queue("val", self.batch_size)
         # input_graph = tf.cond(self.is_training, lambda: train_queue, lambda: test_queue)
-        """
-        inputs = [image, cropped_image, inside_image,
-              caption0,
-              caption1,
-              caption2,
-              caption3,
-              caption4]
-        """
+
         self.true_image = input_to_graph[0]
         self.cropped_image = input_to_graph[1]
-        self.inside_image = input_to_graph[2]
+        self.true_hole = input_to_graph[2]
         self.mean_caption = None
         for i in range(3, 8):
             input_to_graph[i] = tf.transpose(input_to_graph[i], [0, 2, 1])
@@ -56,7 +53,7 @@ class Graph:
 
         # Encode the image
         z_vec = self._encoder(self.true_image, self.z)
-        self.fake_hole = self._decoder(z_vec)
+        self.reconstructed_hole = self._decoder(z_vec)
         return None
 
     def _generate_condition(self, sentence_embedding, scope_name="generate_condition", scope_reuse=False):
@@ -185,15 +182,74 @@ class Graph:
         # Reconstruction error
         recon_mask = helper.get_mask_recon()
         # Loss for original image
-        loss_recon_ori = tf.square(self.inside_image - self.fake_hole)
-        loss_recon_center = tf.reduce_mean(
+        loss_recon_ori = tf.square(self.true_hole - self.reconstructed_hole)
+        self._loss_recon_center = tf.reduce_mean(
             tf.sqrt(1e-5 + tf.reduce_sum(loss_recon_ori * (1 - recon_mask), [1, 2, 3])))
-        loss_recon_overlap = tf.reduce_mean(
+        self._loss_recon_overlap = tf.reduce_mean(
             tf.sqrt(1e-5 + tf.reduce_sum(loss_recon_ori * recon_mask, [1, 2, 3]))) * 10
-        self.loss = loss_recon_center + loss_recon_overlap + self.kl_loss
+        self.loss = self._loss_recon_center + self._loss_recon_overlap + self.kl_loss
 
+    def _optimize(self):
+        """
+        Helper to create mechanism for computing the derivative wrt to the loss
+        :return:
+        """
+        # Retrieve all trainable variables
+        train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
-if __name__ == '__main__':
-    b = Graph()
-    b.build()
-    b._test()
+        # Compute the gradient (return a pair of variable and their respective gradient)
+        grads = self.optimizer.compute_gradients(loss=self.loss, var_list=train_variables)
+        self.train_fn = self.optimizer.apply_gradients(grads, global_step=self.global_step)
+
+    def _summaries(self):
+        """
+        Helper to add summaries
+        :return:
+        """
+        trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        for var in trainable_variable:
+            tf.summary.histogram(var.op.name, var)
+
+        # Add summaries for images
+        tf.summary.image(name="true_image", tensor=self.true_image)
+        tf.summary.image(name="crop_image", tensor=self.cropped_image)
+        tf.summary.image(name="true_hole", tensor=self.true_hole)
+        tf.summary.image(name="reconstructed_hole", tensor=self.reconstructed_hole)
+
+        # Add summaries for loss functions
+        tf.summary.scalar(name="loss_recon_center", tensor=self._loss_recon_center)
+        tf.summary.scalar(name="loss_recon_overlap", tensor=self._loss_recon_overlap)
+        tf.summary.scalar(name="kl_loss", tensor=self.kl_loss)
+        tf.summary.scalar(name="loss", tensor=self.loss)
+
+        self.merged_summary_op = tf.summary.merge_all()
+
+    def _restore(self, save_name="model/"):
+        """
+        Retrieve last model saved if possible
+        Create a main Saver object
+        Create a SummaryWriter object
+        Init variables
+        :param save_name: string (default : model)
+            Name of the model
+        :return:
+        """
+        saver = tf.train.Saver(max_to_keep=1)
+        # Try to restore an old model
+        last_saved_model = tf.train.latest_checkpoint(save_name)
+
+        group_init_ops = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+        self.sess.run(group_init_ops)
+        summary_writer = tf.summary.FileWriter('logs/',
+                                               graph=self.sess.graph)
+        if last_saved_model is not None:
+            saver.restore(self.sess, last_saved_model)
+            print("[*] Restoring model  {}".format(last_saved_model))
+        else:
+            tf.train.global_step(self.sess, self.global_step)
+            print("[*] New model created")
+        return saver, summary_writer
+
+    def train(self):
+        for _ in self.nb_epochs:
+            self.sess.run(self.train_fn)
