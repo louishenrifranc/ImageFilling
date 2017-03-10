@@ -214,7 +214,8 @@ class Graph:
         tf.summary.image(name="crop_image", tensor=self.cropped_image)
         tf.summary.image(name="true_hole", tensor=self.true_hole)
         tf.summary.image(name="reconstructed_hole", tensor=self.reconstructed_hole)
-
+        tf.summary.image(name="reconstructed_image",
+                         tensor=helper.reconstructed_image(self.reconstructed_hole, self.true_image))
         # Add summaries for loss functions
         tf.summary.scalar(name="loss_recon_center", tensor=self._loss_recon_center)
         tf.summary.scalar(name="loss_recon_overlap", tensor=self._loss_recon_overlap)
@@ -225,16 +226,21 @@ class Graph:
 
     def train(self):
 
-        self.saver, self.summary_writer = helper.restore(self.sess)
+        self.saver, self.summary_writer = helper.restore(self)
 
-        self.sess.run(tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()))
         tf.train.start_queue_runners(sess=self.sess)
 
         coord = tf.train.Coordinator()
-        for _ in trange(self.nb_epochs, desc="Epoch"):
+
+        epoch_restart = self.global_step.eval(self.sess) // (
+            (len(self.cfg.queue.filename) * self.cfg.queue.nb_examples_per_file) // self.batch_size)
+        print(epoch_restart)
+
+        for epoch in trange(self.nb_epochs, desc="Epoch"):
             if coord.should_stop():
                 break
-
+            if epoch < epoch_restart:
+                continue
             helper.train_epoch(self)
             if self.cfg.queue.is_val_set:
                 # TODO: waiting for validation embedding created

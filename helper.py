@@ -124,10 +124,10 @@ def get_mask_recon(hiding_size=32, overlap_size=7):
 
 
 def get_mask_hiding(hiding_size=32, image_size=64):
-    pad_size = (image_size - hiding_size) / 2
+    pad_size = (image_size - hiding_size) // 2
     mask = tf.pad(tf.ones([hiding_size, hiding_size]), [[pad_size, pad_size], [pad_size, pad_size]])
     mask = tf.reshape(mask, [image_size, image_size, 1])
-    mask = tf.concat(2, [mask] * 3)
+    mask = tf.concat([mask] * 3, 2)
     """
     ---------------
     |             |
@@ -139,7 +139,7 @@ def get_mask_hiding(hiding_size=32, image_size=64):
     return mask
 
 
-def restore(sess, save_name="model/"):
+def restore(model, save_name="model/"):
     """
     Retrieve last model saved if possible
     Create a main Saver object
@@ -154,13 +154,14 @@ def restore(sess, save_name="model/"):
     last_saved_model = tf.train.latest_checkpoint(save_name)
 
     group_init_ops = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-    sess.run(group_init_ops)
+    model.sess.run(group_init_ops)
     summary_writer = tf.summary.FileWriter('logs/',
-                                           graph=sess.graph)
+                                           graph=model.sess.graph)
     if last_saved_model is not None:
-        saver.restore(sess, last_saved_model)
+        saver.restore(model.sess, last_saved_model)
         print("[*] Restoring model  {}".format(last_saved_model))
     else:
+        tf.train.global_step(model.sess, model.global_step)
         print("[*] New model created")
     return saver, summary_writer
 
@@ -168,7 +169,7 @@ def restore(sess, save_name="model/"):
 def train_epoch(model, saving_each_iter=10):
     nb_train_iter = (len(model.cfg.queue.filename) * model.cfg.queue.nb_examples_per_file) // model.batch_size
     for i in trange(nb_train_iter, leave=False, desc="Training iteration"):
-        op = [model.loss]
+        op = [model.train_fn]
         if i % saving_each_iter == 0:
             op.append(model.merged_summary_op)
         out = model.sess.run(op, feed_dict={model.is_training: True})
@@ -176,6 +177,14 @@ def train_epoch(model, saving_each_iter=10):
         if i % saving_each_iter == 0:
             current_iter = model.sess.run(model.global_step)
             model.summary_writer.add_summary(out[1], global_step=current_iter)
-            if not os.path.exists("model"):
-                os.makedirs("model")
-            model.saver.save(model.sess, "model/model", global_step=current_iter)
+
+    if not os.path.exists("model"):
+        os.makedirs("model")
+    current_iter = model.sess.run(model.global_step)
+    model.saver.save(model.sess, "model/model", global_step=current_iter)
+
+
+def reconstructed_image(reconstructed_hole, true_image):
+    padded = tf.pad(tensor=reconstructed_hole, paddings=[[0, 0], [16, 16], [16, 16], [0, 0]])
+    return padded + tf.stack([1 - get_mask_hiding()] * true_image.get_shape().as_list()[0],
+                             axis=0) * true_image
