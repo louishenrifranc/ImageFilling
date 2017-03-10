@@ -1,25 +1,12 @@
 import os
 import tensorflow as tf
+from tqdm import trange
 
 
 def read_and_decode(filename_queue,
                     batch_size,
                     flip=True,
                     contrast=True):
-    """
-    Given a queue of filename, it reads every example stored
-    in every TfRecord file, and accumulate them in batch
-    Summary and Reviews are automatically padded with zeros
-    :param filename_queue: A list of filename
-    :return:
-        A tuple containing a single batch
-            (summary: batch_size x max_sequence_length_in_summary_batch,
-            review: batch_size x max_sequence_length_in_review_batch,
-            score: batch_size,
-            reviewer_id: batch_size,
-            film_id: batch_size)
-            Every element are int64
-    """
     reader = tf.TFRecordReader()
 
     # Read a single example
@@ -45,11 +32,10 @@ def read_and_decode(filename_queue,
                     fn1=lambda: image)
     if flip:
         image = tf.image.random_flip_left_right(image)
-    # image = tf.image.random_flip_up_down(image)
 
-    if contrast:
-        image = tf.image.random_contrast(image,
-                                         lower=0.8, upper=1.2)
+    # if contrast:
+    #     image = tf.image.random_contrast(image,
+    #                                      lower=0.8, upper=1.2)
     # image = tf.image.random_brightness(image, max_delta=100)
     image.set_shape((64, 64, 3))
     inside_image = tf.image.central_crop(image, 0.50)
@@ -116,8 +102,6 @@ def create_queue(filename, batch_size):
     return read_and_decode(filename_queue, batch_size)
 
 
-
-
 def sample(mean, log_sigma):
     epsilon = tf.truncated_normal(tf.shape(mean))
     # emb_dim (100)
@@ -156,41 +140,43 @@ def get_mask_hiding(hiding_size=32, image_size=64):
     return mask
 
 
-if __name__ == '__main__':
-    import numpy as np
-    from tqdm import trange
+def restore(sess, save_name="model/"):
+    """
+    Retrieve last model saved if possible
+    Create a main Saver object
+    Create a SummaryWriter object
+    Init variables
+    :param save_name: string (default : model)
+        Name of the model
+    :return:
+    """
+    saver = tf.train.Saver(max_to_keep=1)
+    # Try to restore an old model
+    last_saved_model = tf.train.latest_checkpoint(save_name)
 
-    # Number of different captions to plot
-    number_of_examples = 2000
-    # Batch size (make sure gcd(number of examples, 5 *  batch_size) != 1
-    batch_size = 20
+    group_init_ops = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+    sess.run(group_init_ops)
+    summary_writer = tf.summary.FileWriter('logs/',
+                                           graph=sess.graph)
+    if last_saved_model is not None:
+        saver.restore(sess, last_saved_model)
+        print("[*] Restoring model  {}".format(last_saved_model))
+    else:
+        print("[*] New model created")
+    return saver, summary_writer
 
-    # If to saved them all temporary files are saved, else everything is collect and delete
-    to_saved = False
 
-    # Iterate over all the filename
-    writer_filename = [os.path.join("examples", "train{}.tfrecords".format(i)) for i in range(3, 5)]
-    filename_queue = tf.train.string_input_producer(
-        writer_filename)
-    images = read_and_decode(filename_queue, batch_size)
+def train_epoch(model, saving_each_iter=10):
+    nb_train_iter = len(model.cfg.queue.filename) // model.batch_size
+    for i in trange(nb_train_iter, leave=False, desc="Training iteration"):
+        op = [model.loss]
+        if i % saving_each_iter == 0:
+            op.append(model.merged_summary_op)
+        out = model.sess.run(op, feed_dict={model.is_training: True})
 
-    # Dictionnary containing all pair of embedding-image
-    dict = {}
-    with tf.Session() as sess:
-        group = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+        if i % saving_each_iter == 0:
+            current_iter = model.sess.run(model.global_step)
+            model.summary_writer.add_summary(out[1], global_step=current_iter)
+            model.saver.save(model.sess, global_step=current_iter)
 
-        sess.run(group)
-        coord = tf.train.Coordinator()
-        tf.train.start_queue_runners(sess=sess)
-        # Number of batches = number of different caption divided by 5 (because every image has 5 captions) and the batch size
-        n_train_batches = number_of_examples // (5 * batch_size)
-
-        # Iterate over all batches
-        for i in trange(n_train_batches, leave=False):
-            if coord.should_stop():
-                break
-            obj = sess.run([images])
-
-        coord.join()
-        coord.request_stop()
-        coord.wait_for_stop()
+# self, saver, summary_writer, is_iter=True, extras=None):

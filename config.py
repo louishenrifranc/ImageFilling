@@ -34,5 +34,6 @@ __C.queue = edict()
 __C.queue.filename = os.path.join(os.path.dirname(os.path.basename(__file__)), "examples", "train0.tfrecords")
 __C.queue.is_val_set = False
 __C.queue.nb_examples_per_file = 1000
+
 # GAN options
 __C.gan = edict()

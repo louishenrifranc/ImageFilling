@@ -2,14 +2,15 @@ import tensorflow as tf
 import tensorflow.contrib.layers as ly
 import helper
 import tf_utils
+from tqdm import trange
 
 
 class Graph:
-    def __init__(self, cfg):
-        self.batch_size = cfg.train.batch_size
-        self.nb_epochs = cfg.train.nb_epochs
+    def __init__(self, args):
+        self.batch_size = args.train.batch_size
+        self.nb_epochs = args.train.nb_epochs
 
-        self.optimizer = cfg.train.optimizer
+        self.optimizer = args.train.optimizer
         # Placeholder
         self.is_training = tf.placeholder(tf.bool)
 
@@ -17,11 +18,11 @@ class Graph:
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # Input filename
-        self.__filename = cfg.trai.filename
+        self.cfg = args
         self.sess = tf.Session()
 
     def _inputs(self):
-        input_to_graph = helper.create_queue(self.__filename, self.batch_size)
+        input_to_graph = helper.create_queue(self.cfg.queue.filename, self.batch_size)
         # test_queue = helper.create_queue("val", self.batch_size)
         # input_graph = tf.cond(self.is_training, lambda: train_queue, lambda: test_queue)
 
@@ -36,12 +37,7 @@ class Graph:
 
         self.mean_caption = tf.reduce_mean(self.mean_caption, axis=1)
 
-    def _test(self):
-        group_init_ops = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-        self.sess.run(group_init_ops)
-        tf.train.start_queue_runners(sess=self.sess)
-
-        captions = self.sess.run([self.fake_hole], feed_dict={self.is_training: True})[0]
+        captions = self.sess.run([self.reconstructed_hole], feed_dict={self.is_training: True})[0]
 
     def build(self):
         self._inputs()
@@ -61,10 +57,10 @@ class Graph:
             if scope_reuse:
                 scope.reuse_variables()
             out = ly.fully_connected(sentence_embedding,
-                                     cfg.emb.emb_dim * 2,
+                                     self.cfg.emb.emb_dim * 2,
                                      activation_fn=tf_utils.leaky_rectify)
-            mean = out[:, :cfg.emb.emb_dim]
-            log_sigma = out[:, cfg.emb.emb_dim:]
+            mean = out[:, :self.cfg.emb.emb_dim]
+            log_sigma = out[:, self.cfg.emb.emb_dim:]
             # emb_dim
             return mean, log_sigma
 
@@ -224,32 +220,22 @@ class Graph:
 
         self.merged_summary_op = tf.summary.merge_all()
 
-    def _restore(self, save_name="model/"):
-        """
-        Retrieve last model saved if possible
-        Create a main Saver object
-        Create a SummaryWriter object
-        Init variables
-        :param save_name: string (default : model)
-            Name of the model
-        :return:
-        """
-        saver = tf.train.Saver(max_to_keep=1)
-        # Try to restore an old model
-        last_saved_model = tf.train.latest_checkpoint(save_name)
-
-        group_init_ops = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-        self.sess.run(group_init_ops)
-        summary_writer = tf.summary.FileWriter('logs/',
-                                               graph=self.sess.graph)
-        if last_saved_model is not None:
-            saver.restore(self.sess, last_saved_model)
-            print("[*] Restoring model  {}".format(last_saved_model))
-        else:
-            tf.train.global_step(self.sess, self.global_step)
-            print("[*] New model created")
-        return saver, summary_writer
-
     def train(self):
-        for _ in self.nb_epochs:
-            self.sess.run(self.train_fn)
+
+        helper.restore(self.sess)
+
+        self.sess.run(tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()))
+        tf.train.start_queue_runners(sess=self.sess)
+
+        coord = tf.train.Coordinator()
+        for _ in trange(self.nb_epochs, desc="Epoch"):
+            if coord.should_stop():
+                break
+
+            helper.train_epoch(self)
+            if self.cfg.queue.is_val_set:
+                # TODO: waiting for validation embedding created
+                pass
+
+        coord.request_stop()
+        coord.join()
