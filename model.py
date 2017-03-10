@@ -10,6 +10,8 @@ class Graph:
         self.batch_size = args.train.batch_size
         self.nb_epochs = args.train.nb_epochs
 
+        self.adv_training = args.gan.train_adversarial
+
         self.optimizer = args.train.optimizer
         # Placeholder
         self.is_training = tf.placeholder(tf.bool)
@@ -23,13 +25,23 @@ class Graph:
 
     def _inputs(self):
         input_to_graph = helper.create_queue(self.cfg.queue.filename, self.batch_size)
-        # test_queue = helper.create_queue("val", self.batch_size)
-        # input_graph = tf.cond(self.is_training, lambda: train_queue, lambda: test_queue)
+        if self.cfg.queue.is_val_set:
+            test_queue = helper.create_queue("val", self.batch_size)
+            input_to_graph = tf.cond(self.is_training, lambda: input_to_graph, lambda: test_queue)
 
+        # True image
         self.true_image = input_to_graph[0]
+
+        # True image filled with mean color (64 x 64 x 3)
         self.cropped_image = input_to_graph[1]
+
+        # True hole (32 x 32 x 3)
         self.true_hole = input_to_graph[2]
+
+        # Wrong image (for adversarial cost) (64 x 64 x 3)
         self.wrong_image = input_to_graph[8]
+
+        # Mean of the caption
         self.mean_caption = None
         for i in range(3, 8):
             input_to_graph[i] = tf.transpose(input_to_graph[i], [0, 2, 1])
@@ -53,6 +65,7 @@ class Graph:
         self.reconstructed_hole = self._decoder(z_vec)
         self.generated_image = helper.reconstructed_image(self.reconstructed_hole, self.true_image)
         self._losses()
+        self._adversarial_loss()
         self._optimize()
         self._summaries()
 
@@ -110,103 +123,117 @@ class Graph:
             # 4 * 4 * 256
             result = tf_utils.cust_conv2d(comb, 512, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node3")
             result = tf_utils.cust_conv2d(result, 256, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node4")
+            if scope_name == "discriminator":
+                result = tf_utils.cust_conv2d(result, 128, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node5")
             return result
 
-    def _decoder(self, input):
-        # Node 0
-        # 4 * 4 * 256
-        node0_0 = tf_utils.cust_conv2d(input, 256, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node0")
-        # 4 * 4 * 64
-        node0_1 = tf_utils.cust_conv2d(node0_0, 128, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node0_1")
-        # 4 * 4 * 64
-        node0_1 = tf_utils.cust_conv2d(node0_1, 128, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node0_2")
-        # 4 * 4 * 128
-        node0_1 = tf_utils.cust_conv2d(node0_1, 256, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node0_3")
+    def _decoder(self, input, scope_name="decoder"):
+        with tf.variable_scope(scope_name) as _:
+            # Node 0
+            # 4 * 4 * 256
+            node0_0 = tf_utils.cust_conv2d(input, 256, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node0")
+            # 4 * 4 * 64
+            node0_1 = tf_utils.cust_conv2d(node0_0, 128, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node0_1")
+            # 4 * 4 * 64
+            node0_1 = tf_utils.cust_conv2d(node0_1, 128, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node0_2")
+            # 4 * 4 * 128
+            node0_1 = tf_utils.cust_conv2d(node0_1, 256, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node0_3")
 
-        # 4 * 4 * 128
-        node1 = tf.add(node0_0, node0_1)
+            # 4 * 4 * 128
+            node1 = tf.add(node0_0, node0_1)
 
-        # Node 1
-        # 8 * 8 * 64
-        node1_0 = tf_utils.cust_conv2d_transpose(node1, 128, w_s=2, h_s=2, is_training=self.is_training,
-                                                 scope_name="node1_0")
-        # 8 * 8 * 32
-        node1_1 = tf_utils.cust_conv2d(node1_0, 64, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node1_1")
-        # 8 * 8 * 32
-        node1_1 = tf_utils.cust_conv2d(node1_1, 64, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node1_2")
-        # 8 * 8 * 64
-        node1_1 = tf_utils.cust_conv2d(node1_1, 128, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node1_3")
+            # Node 1
+            # 8 * 8 * 64
+            node1_0 = tf_utils.cust_conv2d_transpose(node1, 128, w_s=2, h_s=2, is_training=self.is_training,
+                                                     scope_name="node1_0")
+            # 8 * 8 * 32
+            node1_1 = tf_utils.cust_conv2d(node1_0, 64, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node1_1")
+            # 8 * 8 * 32
+            node1_1 = tf_utils.cust_conv2d(node1_1, 64, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node1_2")
+            # 8 * 8 * 64
+            node1_1 = tf_utils.cust_conv2d(node1_1, 128, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node1_3")
 
-        # 8 * 8 * 64
-        node2 = tf.add(node1_0, node1_1)
+            # 8 * 8 * 64
+            node2 = tf.add(node1_0, node1_1)
 
-        # Node 2
-        # 16 * 16 * 16
-        node2_0 = tf_utils.cust_conv2d_transpose(node2, 64, h_s=2, w_s=2, is_training=self.is_training,
-                                                 scope_name="node2_1")
-        # 16 * 16 * 8
-        node2_1 = tf_utils.cust_conv2d(node2_0, 32, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node2_2")
-        # 16 * 16 * 8
-        node2_1 = tf_utils.cust_conv2d(node2_1, 32, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node2_3")
-        # 16 * 16 * 16
-        node2_1 = tf_utils.cust_conv2d(node2_1, 64, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node2_4")
+            # Node 2
+            # 16 * 16 * 16
+            node2_0 = tf_utils.cust_conv2d_transpose(node2, 64, h_s=2, w_s=2, is_training=self.is_training,
+                                                     scope_name="node2_1")
+            # 16 * 16 * 8
+            node2_1 = tf_utils.cust_conv2d(node2_0, 32, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node2_2")
+            # 16 * 16 * 8
+            node2_1 = tf_utils.cust_conv2d(node2_1, 32, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node2_3")
+            # 16 * 16 * 16
+            node2_1 = tf_utils.cust_conv2d(node2_1, 64, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node2_4")
 
-        node3 = tf.add(node2_0, node2_1)
+            node3 = tf.add(node2_0, node2_1)
 
-        # Node 3
-        # 32 x 32 x 8
-        node3_0 = tf_utils.cust_conv2d_transpose(node3, 32, h_s=2, w_s=2, is_training=self.is_training,
-                                                 scope_name="node3")
-        # 16 * 16 * 8
-        node3_1 = tf_utils.cust_conv2d(node3_0, 16, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node3_1")
-        # 16 * 16 * 8
-        node3_1 = tf_utils.cust_conv2d(node3_1, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node3_2")
-        # 16 * 16 * 16
-        node3_1 = tf_utils.cust_conv2d(node3_1, 32, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node3_3")
+            # Node 3
+            # 32 x 32 x 8
+            node3_0 = tf_utils.cust_conv2d_transpose(node3, 32, h_s=2, w_s=2, is_training=self.is_training,
+                                                     scope_name="node3")
+            # 16 * 16 * 8
+            node3_1 = tf_utils.cust_conv2d(node3_0, 16, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node3_1")
+            # 16 * 16 * 8
+            node3_1 = tf_utils.cust_conv2d(node3_1, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node3_2")
+            # 16 * 16 * 16
+            node3_1 = tf_utils.cust_conv2d(node3_1, 32, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node3_3")
 
-        node4 = tf.add(node3_0, node3_1)
+            node4 = tf.add(node3_0, node3_1)
 
-        node4_1 = tf_utils.cust_conv2d(node4, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node4_1")
-        node4_1 = tf_utils.cust_conv2d(node4_1, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
-                                       scope_name="node4_2")
+            node4_1 = tf_utils.cust_conv2d(node4, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node4_1")
+            node4_1 = tf_utils.cust_conv2d(node4_1, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node4_2")
 
-        # 32 x 32 x 3
-        out = tf_utils.cust_conv2d(node4_1, 3, h_f=1, w_f=1, w_s=1, h_s=1, activation_fn=tf.tanh,
-                                   is_training=self.is_training, scope_name="node5")
-        return out
+            # 32 x 32 x 3
+            out = tf_utils.cust_conv2d(node4_1, 3, h_f=1, w_f=1, w_s=1, h_s=1, activation_fn=tf.tanh,
+                                       is_training=self.is_training, scope_name="node5")
+            return out
 
-    def _adversarial_cost(self, scope_name="discriminator"):
+    def _adversarial_loss(self, scope_name="discriminator"):
         real_logit = self._encoder(self.true_image, self.z, scope_name=scope_name)
         wrong_logit = self._encoder(self.wrong_image, self.z, scope_name=scope_name, reuse_variables=True)
         fake_logit = self._encoder(self.generated_image, self.z, scope_name=scope_name, reuse_variables=True)
 
+        train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        self.gen_variables = [v for v in train_variables if not v.name.startswith("discriminator")]
+        self.dis_variables = [v for v in train_variables if v.name.startswith("discriminator")]
+
         self.dis_loss = tf.reduce_mean(wrong_logit + fake_logit - real_logit)
         self.gen_loss = tf.reduce_mean(-fake_logit - wrong_logit)
 
-        train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.gen_variables = [v for v in train_variables if not v.name.startswith("discriminator")]
+        self.all_loss_G = self.gen_loss * 0.1 + (self.kl_loss + self._loss_recon_center
+                                                 + self._loss_recon_overlap) * 0.9
+        self.all_loss_D = self.dis_loss * 0.1
 
-        self.dis_variables = [v for v in train_variables if v.name.startswith("discriminator")]
+        W_G = filter(lambda x: x.name.endswith('weights:0'), self.gen_variables)
+        W_D = filter(lambda x: x.name.endswith('weights:0'), self.dis_variables)
 
-        grads_dis = self.optimizer.compute_gradients(loss=self.dis_loss, var_list=self.dis_variables)
-        self.train_dis = self.optimizer.apply_gradients(grads_dis)
+        self.all_loss_G += 0.00001 * tf.reduce_mean(tf.stack([tf.nn.l2_loss(x) for x in W_G]))
+        self.all_loss_D += 0.00001 * tf.reduce_mean(tf.stack([tf.nn.l2_loss(x) for x in W_D]))
 
-        grads_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
-        self.train_gen = self.optimizer.apply_gradients(grads_gen, global_step=self.global_step)
+        grads_var_dis = self.optimizer.compute_gradients(loss=self.dis_loss, var_list=self.dis_variables)
+        grads_var_dis = map(lambda gv: [tf.clip_by_value(gv[0], -0.1, 0.1), gv[1]], grads_var_dis)
+        self.train_dis = self.optimizer.apply_gradients(grads_var_dis, global_step=self.global_step)
+
+        grads_var_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
+        grads_var_gen = map(lambda gv: [tf.clip_by_value(gv[0], -10., 10.), gv[1]], grads_var_gen)
+        self.train_gen = self.optimizer.apply_gradients(grads_var_gen, global_step=self.global_step)
 
     def _losses(self):
         # KL loss
@@ -231,20 +258,18 @@ class Graph:
         # Retrieve all trainable variables
         train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops):
-            # Compute the gradient (return a pair of variable and their respective gradient)
-            grads = self.optimizer.compute_gradients(loss=self.loss, var_list=train_variables)
-            self.train_fn = self.optimizer.apply_gradients(grads, global_step=self.global_step)
+        # Compute the gradient (return a pair of variable and their respective gradient)
+        grads = self.optimizer.compute_gradients(loss=self.loss, var_list=train_variables)
+        self.train_fn = self.optimizer.apply_gradients(grads, global_step=self.global_step)
 
     def _summaries(self):
         """
         Helper to add summaries
         :return:
         """
-        trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        for var in trainable_variable:
-            tf.summary.histogram(var.op.name, var)
+        # trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        # for var in trainable_variable:
+        #     tf.summary.histogram(var.op.name, var)
 
         # Add summaries for images
         tf.summary.image(name="crop_image", tensor=self.cropped_image, max_outputs=4)
@@ -258,6 +283,10 @@ class Graph:
         tf.summary.scalar(name="loss_recon_overlap", tensor=self._loss_recon_overlap)
         tf.summary.scalar(name="kl_loss", tensor=self.kl_loss)
         tf.summary.scalar(name="loss", tensor=self.loss)
+        tf.summary.scalar(name="generator_loss", tensor=self.gen_loss)
+        tf.summary.scalar(name="discriminator_loss", tensor=self.dis_loss)
+        tf.summary.scalar(name="full_discriminator_loss", tensor=self.all_loss_D)
+        tf.summary.scalar(name="full_generator_loss", tensor=self.all_loss_G)
 
         self.merged_summary_op = tf.summary.merge_all()
 
@@ -269,16 +298,16 @@ class Graph:
 
         coord = tf.train.Coordinator()
 
-        epoch_restart = self.global_step.eval(self.sess) // (
-            (len(self.cfg.queue.filename) * self.cfg.queue.nb_examples_per_file) // self.batch_size)
-        print(epoch_restart)
+        train_fn = helper.train_adversarial_epoch if self.adv_training else helper.train_epoch
 
-        for epoch in trange(self.nb_epochs, desc="Epoch"):
+        epoch_restart = helper.compute_restart_epoch(self)
+
+        for self.epoch in trange(self.nb_epochs, desc="Epoch"):
             if coord.should_stop():
                 break
-            if epoch < epoch_restart:
+            if self.epoch < epoch_restart:
                 continue
-            helper.train_epoch(self)
+            train_fn(self)
             if self.cfg.queue.is_val_set:
                 # TODO: waiting for validation embedding created
                 pass

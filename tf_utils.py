@@ -37,7 +37,7 @@ def cust_conv2d(input_layer, out_dim, h_f=3, w_f=3, h_s=2, w_s=2, padding="SAME"
                         padding,
                         activation_fn=None)
         if batch_norm:
-            out = ly.batch_norm(out, is_training=is_training)
+            out = ly.batch_norm(out, is_training=is_training, updates_collections=None)
         if activation_fn:
             out = activation_fn(out)
         return out
@@ -54,7 +54,7 @@ def cust_conv2d_transpose(input_layer, out_dim, h_f=3, w_f=3, h_s=2, w_s=2, padd
                                   padding,
                                   activation_fn=None)
         if batch_norm:
-            out = ly.batch_norm(out, is_training=is_training)
+            out = ly.batch_norm(out, is_training=is_training, updates_collections=None)
         if activation_fn:
             out = activation_fn(out)
         return out

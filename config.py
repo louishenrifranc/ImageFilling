@@ -37,3 +37,9 @@ __C.queue.nb_examples_per_file = 1000
 
 # GAN options
 __C.gan = edict()
+__C.gan.train_adversarial = False
+__C.gan.n_train_generator = 30
+
+__C.gan.n_train_critic = 150
+__C.gan.n_train_critic_intense = 300
+__C.gan.intense_starting_period = 20
