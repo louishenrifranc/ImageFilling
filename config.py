@@ -16,7 +16,7 @@ __C.obj.dic = {}
 
 # Training options
 __C.train = edict()
-__C.train.batch_size = 10
+__C.train.batch_size = 32
 __C.train.nb_epochs = 600
 __C.train.optimizer = tf.train.AdamOptimizer()
 

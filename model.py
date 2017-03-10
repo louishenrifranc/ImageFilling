@@ -37,20 +37,23 @@ class Graph:
 
         self.mean_caption = tf.reduce_mean(self.mean_caption, axis=1)
 
-        captions = self.sess.run([self.reconstructed_hole], feed_dict={self.is_training: True})[0]
-
     def build(self):
         self._inputs()
 
         self._mean, self._log_sigma = self._generate_condition(self.mean_caption)
 
         # Sample conditioning from a Gaussian distribution parametrized by a Neural Network
-        self.z = helper.sample(self._mean, self._log_sigma)
+        z = helper.sample(self._mean, self._log_sigma)
 
         # Encode the image
-        z_vec = self._encoder(self.true_image, self.z)
+        z_vec = self._encoder(self.true_image, z)
+
+        # Decode the image
         self.reconstructed_hole = self._decoder(z_vec)
-        return None
+
+        self._losses()
+        self._optimize()
+        self._summaries()
 
     def _generate_condition(self, sentence_embedding, scope_name="generate_condition", scope_reuse=False):
         with tf.variable_scope(scope_name) as scope:
@@ -222,7 +225,7 @@ class Graph:
 
     def train(self):
 
-        helper.restore(self.sess)
+        self.saver, self.summary_writer = helper.restore(self.sess)
 
         self.sess.run(tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()))
         tf.train.start_queue_runners(sess=self.sess)

@@ -96,9 +96,8 @@ def create_queue(filename, batch_size):
     :return: list of SparseTensorValue and Tensor
         The output of a queue
     """
-    path = os.path.join(os.path.dirname(os.path.basename(__file__)), "examples", "{}.tfrecords".format(filename))
     filename_queue = tf.train.string_input_producer(
-        [path])
+        filename)
     return read_and_decode(filename_queue, batch_size)
 
 
@@ -112,7 +111,7 @@ def get_mask_recon(hiding_size=32, overlap_size=7):
     mask_recon = tf.pad(tf.ones([hiding_size - 2 * overlap_size, hiding_size - 2 * overlap_size]),
                         [[overlap_size, overlap_size], [overlap_size, overlap_size]])
     mask_recon = tf.reshape(mask_recon, [hiding_size, hiding_size, 1])
-    mask_recon = tf.concat(2, [mask_recon] * 3)
+    mask_recon = tf.concat([mask_recon] * 3, 2)
     """
     ---------------
     |             |
@@ -167,7 +166,7 @@ def restore(sess, save_name="model/"):
 
 
 def train_epoch(model, saving_each_iter=10):
-    nb_train_iter = len(model.cfg.queue.filename) // model.batch_size
+    nb_train_iter = (len(model.cfg.queue.filename) * model.cfg.queue.nb_examples_per_file) // model.batch_size
     for i in trange(nb_train_iter, leave=False, desc="Training iteration"):
         op = [model.loss]
         if i % saving_each_iter == 0:
@@ -177,6 +176,6 @@ def train_epoch(model, saving_each_iter=10):
         if i % saving_each_iter == 0:
             current_iter = model.sess.run(model.global_step)
             model.summary_writer.add_summary(out[1], global_step=current_iter)
-            model.saver.save(model.sess, global_step=current_iter)
-
-# self, saver, summary_writer, is_iter=True, extras=None):
+            if not os.path.exists("model"):
+                os.makedirs("model")
+            model.saver.save(model.sess, "model/model", global_step=current_iter)
