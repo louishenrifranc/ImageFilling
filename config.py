@@ -14,7 +14,7 @@ __C.obj.dic = {}
 
 # Training options
 __C.train = edict()
-__C.train.batch_size = 64
+__C.train.batch_size = 10
 __C.train.nb_epochs = 600
 
 # Embedding values

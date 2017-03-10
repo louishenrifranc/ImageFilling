@@ -27,26 +27,35 @@ def leaky_rectify(x, leakiness=0.2):
     return tf.maximum(x, leakiness * x)
 
 
-def cust_conv2d(input_layer, out_dim, in_dim=None, h_f=3, w_f=3, h_s=2, w_s=2, padding="SAME", scope_name="conv2D",
-                batch_norm=True, activation_fn=tf_utils.leaky_rectify):
+def cust_conv2d(input_layer, out_dim, h_f=3, w_f=3, h_s=2, w_s=2, padding="SAME", scope_name=None,
+                batch_norm=True, activation_fn=tf_utils.leaky_rectify, is_training=True):
     with tf.variable_scope(scope_name) as _:
-        w = tf.Variable(name='W', initial_value=tf.truncated_normal_initializer(
-            [h_f, w_f, in_dim or input_layer.shape[-1], out_dim], stddev=0.02))
-        out = tf.nn.conv2d(input_layer.tensor, w, strides=[1, h_s, w_s, 1], padding=padding)
+        out = ly.conv2d(input_layer,
+                        out_dim,
+                        [w_f, h_f],
+                        [h_s, w_s],
+                        padding,
+                        activation_fn=None)
         if batch_norm:
-            out = ly.batch_norm(out)
-        if activation_fn is not None:
+            out = ly.batch_norm(out, is_training=is_training)
+        if activation_fn:
             out = activation_fn(out)
         return out
 
 
-def cust_conv2d_transpose(input_layer, out_dim, h_f=3, w_f=3, h_s=2, w_s=2, padding="SAME", scope_name="conv2d_trans",
-                          batch_norm=True, activation_fn=tf_utils.leaky_rectify)
+def cust_conv2d_transpose(input_layer, out_dim, h_f=3, w_f=3, h_s=2, w_s=2, padding="SAME",
+                          scope_name="transpose_conv_2D",
+                          batch_norm=True, activation_fn=tf_utils.leaky_rectify, is_training=True):
     with tf.variable_scope(scope_name) as _:
-        out = ly.conv2d_transpose(input_layer, out_dim, [h_f, w_f], stride=[h_s, w_s], padding=padding)
+        out = ly.conv2d_transpose(input_layer,
+                                  out_dim,
+                                  [w_f, h_f],
+                                  [w_s, h_s],
+                                  padding,
+                                  activation_fn=None)
         if batch_norm:
-            out = ly.batch_norm(out)
-        if activation_fn is not None:
+            out = ly.batch_norm(out, is_training=is_training)
+        if activation_fn:
             out = activation_fn(out)
         return out
 

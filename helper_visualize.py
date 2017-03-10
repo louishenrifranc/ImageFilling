@@ -158,7 +158,6 @@ if __name__ == '__main__':
         coord.join()
         coord.request_stop()
         coord.wait_for_stop()
-
     # Save embedding
     if to_saved:
         pickle.dump(dict, open("embedding.pkl", "wb"), protocol=pickle.HIGHEST_PROTOCOL)
