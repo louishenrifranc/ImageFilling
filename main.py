@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--train_first_file", type=int, default=58, help="Number of the first training file")
+    parser.add_argument("--train_first_file", type=int, default=3, help="Number of the first training file")
     parser.add_argument("--train_set_size", type=int, default=1000, help="Number of training examples")
     parser.add_argument("--val_set", type=bool, default=False, help="Whether to use a validation set")
     parser.add_argument("--batch_size", type=int, default=16, help="Size of a batch")
