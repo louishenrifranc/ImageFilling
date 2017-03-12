@@ -23,7 +23,7 @@ def create_text_metadata(nb_examples, starting_index=3000, nb_caption_per_pictur
         for index, filename in enumerate(os.listdir(path_images)):
             if index < starting_index:
                 continue
-            if index > (starting_index + nb_examples):
+            if index >= (starting_index + nb_examples):
                 break
             captions = caption_file[filename.split(".")[0]]
             for i, caption in enumerate(captions):
@@ -32,4 +32,4 @@ def create_text_metadata(nb_examples, starting_index=3000, nb_caption_per_pictur
                 metadata_file.write('%s\t%s\n' % ("_".join(caption.split(" ")), filename))
 
 
-create_text_metadata(2000)
+create_text_metadata(6000)
