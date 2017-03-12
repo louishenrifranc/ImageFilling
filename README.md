@@ -105,5 +105,8 @@ For this project, I decided to give a shot to the recent WGAN. As far as I under
 * The discriminator loss is ```tf.reduce_mean(features_fake_image + feature_fake_captions - features_real)```.  
 As of now, it does not help the model, and I observed that the inside generated images become completely off-context. It fill the images with a squarred blurry images which does not have the same color. I need to fix it.
 
+### Preliminary results
+
+
 ### Clame
 I write as I think, and my english is far from perfect, sorry if reading this is hurting your eyes.
