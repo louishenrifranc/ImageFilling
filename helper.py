@@ -154,7 +154,7 @@ def reconstructed_image(reconstructed_hole, true_image):
                              axis=0) * true_image
 
 
-def restore(model, save_name="model/"):
+def restore(model, save_name="model/", logs_folder="logs/"):
     """
     Retrieve last model saved if possible
     Create a main Saver object
@@ -170,7 +170,7 @@ def restore(model, save_name="model/"):
 
     group_init_ops = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
     model.sess.run(group_init_ops)
-    summary_writer = tf.summary.FileWriter('logs/',
+    summary_writer = tf.summary.FileWriter(logs_folder,
                                            graph=model.sess.graph)
     if last_saved_model is not None:
         saver.restore(model.sess, last_saved_model)

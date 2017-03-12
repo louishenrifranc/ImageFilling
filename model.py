@@ -272,11 +272,12 @@ class Graph:
         #     tf.summary.histogram(var.op.name, var)
 
         # Add summaries for images
-        tf.summary.image(name="crop_image", tensor=self.cropped_image, max_outputs=10)
-        tf.summary.image(name="true_hole", tensor=self.true_hole, max_outputs=10)
-        tf.summary.image(name="reconstructed_hole", tensor=self.reconstructed_hole, max_outputs=10)
-        tf.summary.image(name="true_image", tensor=self.true_image, max_outputs=10)
-        tf.summary.image(name="reconstructed_image", tensor=self.generated_image, max_outputs=10)
+        num_images = self.batch_size
+        tf.summary.image(name="crop_image", tensor=self.cropped_image, max_outputs=num_images)
+        tf.summary.image(name="true_hole", tensor=self.true_hole, max_outputs=num_images)
+        tf.summary.image(name="reconstructed_hole", tensor=self.reconstructed_hole, max_outputs=num_images)
+        tf.summary.image(name="true_image", tensor=self.true_image, max_outputs=num_images)
+        tf.summary.image(name="reconstructed_image", tensor=self.generated_image, max_outputs=num_images)
 
         # Add summaries for loss functions
         tf.summary.scalar(name="loss_recon_center", tensor=self._loss_recon_center)
@@ -314,3 +315,14 @@ class Graph:
 
         coord.request_stop()
         coord.join()
+
+    def fill_image(self, num_images):
+        _, self.summary_writer = helper.restore(self, logs_folder="prediction/")
+        tf.train.start_queue_runners(sess=self.sess)
+
+        coord = tf.train.Coordinator()
+        self.batch_size = num_images
+        _, summary_str = self.sess.run([self.generated_image, self.merged_summary_op],
+                                       feed_dict={self.is_training: False})
+        self.summary_writer.add_summary(summary_str)
+        self.summary_writer.flush()

@@ -46,11 +46,11 @@ Here are some results (code is in _helper\_visualize.py_, make sure you create a
 __Take home message:__
 I think embedding trained with the Skip-Though vector model have captured some interesting semantic of the captions but ....
 
-### Are they influencing the filling neural network.
+### Are they influencing the model
 See model section to see the current model used. 
 No, not at all. To prove that, I did some experiments. 
 
-I tried three experiments. __This ten images have never been seen by the model__, __I re-run experiments twice__:
+I tried three experiments. __This ten images have never been seen by the model__, __I re-run every experiments twice__:
 * Replace embedding by random noise (noise is sample from a Gaussian distribution(0; 0.7))
 ![](images/first_training_example_with_false_embeddings.PNG)
 ![](images/second_training_example_with_fake_embeddings.PNG)
@@ -67,7 +67,9 @@ I have some insights why the model didn't need them, but I am open to discuss th
 
 # Model
 ## A. Queues and data augmentation
-I am using Tensorflow queues, because it is much simpler than feeding a dictionary, and I can make some data augmentation before passing data to the model. Right now I am only randomly flipping right or left the images. I am planning to add some techniques explained in this [blog](http://machinelearningmastery.com/image-augmentation-deep-learning-keras/). Also, i don't fill the image with black or white color, I am filling every channel with their the respective average color of the cropped image. 
+I am using Tensorflow queues, because it is much simpler than feeding a dictionary, way faster, allow me to fastly experimenting new model, and I can make some data augmentation before passing data to the model.  
+Right now I am only randomly flipping right or left the images. I am planning to add some techniques explained in this [blog](http://machinelearningmastery.com/image-augmentation-deep-learning-keras/).  
+Also, i don't fill the image with black or white color, I am filling every pixel to fill in each channel with the respective average channel color of the cropped image.   
 I crop the image in the middle, for simplicity. Some papers claimed it does not harm generalization (but I am not sure if it's more than they were lacking time for experimenting it :) ).
 
 ## B. Embedding embedding in the model
@@ -77,7 +79,7 @@ tldr: I used a technique I found in the recent StackGan architecture. They advan
 
 After seeing the results from the paper, I was convinced it will help the "generative" model (in the sense of generating images) towards the tasks of filling images.
 Here is the plot of the KL loss. During the first iterations, I saw it going down, but afterwards it restart to going up. Note that the large increase of the curve represents the moment when I introduced new examples to the model, so I guess the KL divergence is responsible of avoiding some overfitting.
-![](images/kl_losses.PNG)
+![](images/kl_loss.PNG)
 
 Before sampling from a normal distribution, embedding, five in total per images, are averaged. I did this, because based on the previous embedding plots, I think averaging embeddings should give me the a point in the high dimension space which has some notions of the semantic from every captions. 
 __Notes__: I know here are some more advanced technique such as using a recurrent neural network, but in this configuration, i don't think averaging should harm the training model.  
@@ -102,7 +104,7 @@ There are out two papers who claimed to remove the blurriness in generated image
 * One is using neural style transfer, and it takes three minutes to generate a new images. With the recent progress in Neural Style Transfer [google paper](https://arxiv.org/pdf/1610.07629v2.pdf), maybe
 * The other one, wait for it... is a GAN which try to differentiate between truth generated image and fake ones. The D should have some insights of what is a correct images with wrong captions, so the D should consider truth images, with wrong captions as fake sample. [paper](https://arxiv.org/abs/1604.07379).  
 ![](images/meme.jpeg)  
-I don't have a long experience with GAN's but every time I wanted to train them, I had to stay close my computer, because it is very unstable, and whether the G don't learn anything, whether G and D loss keeps oscillating. 
+I don't have a long experience with GAN's but every time I wanted to train them, I had to stay close my computer, because it is very unstable, and whether the G doesn't learn anything, whether G and D loss keeps oscillating. 
 For this project, I decided to give a shot to the recent WGAN. As far as I understood, the paper claims we can train discriminator to convergence, then train the generator on it. In compensation, gradients of the discriminator need to be clipped to small values... but we don't need a sigmoid at the end of the D, which is also responsible for vanishing the gradient. 
 * The generator loss become the previous loss defined in 2) + ```tf.reduce_mean(-(features_fake_image + feature_fake_captions)```
 * The discriminator loss is ```tf.reduce_mean(features_fake_image + feature_fake_captions - features_real)```. 

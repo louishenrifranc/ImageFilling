@@ -12,7 +12,6 @@ if __name__ == '__main__':
 
     parser.add_argument("--train_adversarial", type=bool, default=False,
                         help="Whether to train the model adding an adversarial cost")
-
     args = parser.parse_args()
     print(args)
     # Config default value
@@ -27,7 +26,7 @@ if __name__ == '__main__':
                            cfg.queue.nb_examples_per_file)]
 
     print(cfg.queue.filename)
-    
+
     # Whether we create a validation set
     cfg.queue.is_val_set = args.val_set
 

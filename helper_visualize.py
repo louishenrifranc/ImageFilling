@@ -2,43 +2,11 @@ from tensorflow.contrib.tensorboard.plugins import projector
 from tqdm import trange
 import tensorflow as tf
 from PIL import Image
+from utils import create_text_metadata
 import numpy as np
 import pickle
 import os
 import cv2
-
-
-def create_text_metadata(nb_examples, starting_index=2000):
-    """
-    Number of examples to create
-    :param nb_examples: int
-        The number of examples to create metadata for
-    :param starting_index: int
-
-    :return:
-    """
-    # Path where to save the metadata
-    path_logs = "logs"
-    # Path of the directory containing the images to plot
-    path_images = "train2014"
-    # Path containing the directory containing all the dict
-    caption_file = pickle.load(open("dict.pkl", "rb"))
-
-    metadata = os.path.join(path_logs, 'metadata.tsv')
-
-    # Iterate over all files
-    with open(metadata, 'w') as metadata_file:
-        metadata_file.write("Caption\tFilename\n")
-        for index, filename in enumerate(os.listdir(path_images)):
-            if index < starting_index:
-                continue
-            if index > (starting_index + nb_examples):
-                break
-            print(index, filename)
-            exit()
-            captions = caption_file[filename.split(".")[0]]
-            for caption in captions:
-                metadata_file.write('%s\t%s\n' % (caption, filename))
 
 
 def read_and_decode(filename_queue,
@@ -113,8 +81,15 @@ def read_and_decode(filename_queue,
 
 
 if __name__ == '__main__':
+
     # Number of different captions to plot
     number_of_examples = 6000
+
+    # !!! IMPORTANT !!!
+    # Not cross-OS function. File are not ordered in the same way between Linux and Windows
+    # Make sure you assign the correct metadata to each file.
+    # create_text_metadata(number_of_examples)
+
     # Batch size (make sure gcd(number of examples, 5 *  batch_size) != 1
     batch_size = 20
 
@@ -122,7 +97,7 @@ if __name__ == '__main__':
     to_saved = False
 
     # Iterate over all the filename
-    writer_filename = [os.path.join("examples", "train{}.tfrecords".format(i)) for i in range(3, 5)]
+    writer_filename = [os.path.join("examples", "train{}.tfrecords".format(i)) for i in range(3, 10)]
     filename_queue = tf.train.string_input_producer(
         writer_filename)
     images = read_and_decode(filename_queue, batch_size)
