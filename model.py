@@ -302,15 +302,6 @@ class Graph:
 
         epoch_restart = helper.compute_restart_epoch(self)
 
-        z, mean, variance = self.sess.run([self.z, self._mean, self._log_sigma], feed_dict={self.is_training: True})
-
-        import numpy as np
-        print(z)
-        print(mean)
-        print(variance)
-        print(np.mean(z, axis=1))
-        print(np.var(z, axis=1))
-        exit()
         for self.epoch in trange(self.nb_epochs, desc="Epoch"):
             if coord.should_stop():
                 break
