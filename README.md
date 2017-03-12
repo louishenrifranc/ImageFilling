@@ -38,9 +38,9 @@ Here are some results (code is in _helper\_visualize.py_, make sure you create a
 ![](images/elephant.PNG)
 
 #### Exploring the points with t-SNE
-* Picture of people skiing 
+* Picture of people skiing  
 ![](images/snow_images.PNG)
-* London red bus 
+* London red bus (or bus in general)  
 ![](images/red_bus.PNG)
 
 __Take home message:__
@@ -62,7 +62,8 @@ I tried three experiments. __This ten images have never been seen by the model__
 * Replace averaging embedding by selecting only one embedding
 ![](images/not_mean_caption.PNG)
 
-I really wanted to say "Yes embedding makes the difference", but as far as I know, I don't see any differences. I have some insights why it is not working, but I am open to discuss this.
+I really wanted to say "Yes embedding makes the difference", but as far as I know, I don't see any differences. And if I see some differences sometimes, I guess it's because I want to see them...  
+I have some insights why the model didn't need them, but I am open to discuss this (does StackGAN can't generalize on variousworks because it was trained only on very specific captions: flower or birds?).  
 
 # Model
 ## A. Queues and data augmentation
@@ -91,6 +92,7 @@ Code is in ```model.py```
 #### Miscellaneous
 * batch normalization all the way long
 * no dropout yet
+* batch size is small (gpu is never fully loaded), but I found experimentally helping the optimization process.  
 
 ### 2. Loss function
 Classic L2 loss, but for smoothness in the border, I encourage more pixel at the frontier to be closed the truth. When seeing the images generated, I saw the difference of this trick: it really remove the effect of a squared block append on top of the image, which is pretty cool
@@ -108,8 +110,20 @@ As of now, it does not help the model, and I observed that the inside generated 
 I need to fix it.  
 
 ### Preliminary results
+* Loss functions (refer to the code, some of them are plotted but are not currently used ... all gan loss):
+![](images/loss.PNG)
+* Sample images unseen (always generated then true pictures)
+![](images/sample1_fake.PNG)
+![](images/true_image1.PNG)
+![](images/sample2_fake.PNG)
+![](images/true_image2.PNG)
+![](images/sample3_fake.PNG)
+![](images/true_image3.PNG)
+![](images/sample4_fake.PNG)
+![](images/true_image4.PNG)  
 
-
+I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
+ 
 # Clame
 * I write as I think, and my english is far from perfect, sorry if reading this is hurting your eyes.  
 * Contribute or ask questions if you want :)
@@ -118,8 +132,9 @@ I need to fix it.
 # RoadMap
 - [X] Finish generating embeddings
 - [ ] Reduce learning rate before overfitting
+- [ ] Is DRAW outdated based on GAN recent results... DRAW architecture were every iteration is condition on previous generated images + new caption?
 - [ ] Better data augmentation
 - [ ] Make GAN works, whether WGAN or classical ones
 - [ ] Refactor the code
-- [ ] Try to generate better images, with StackGAN and images retrieved from MS-COCO
+- [ ] Try to generate "HD" images, like in StackGAN (need to retrieve from MS-COCO for supervised learning)
 
