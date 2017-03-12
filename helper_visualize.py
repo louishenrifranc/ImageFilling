@@ -114,7 +114,7 @@ def read_and_decode(filename_queue,
 
 if __name__ == '__main__':
     # Number of different captions to plot
-    number_of_examples = 2000
+    number_of_examples = 6000
     # Batch size (make sure gcd(number of examples, 5 *  batch_size) != 1
     batch_size = 20
 

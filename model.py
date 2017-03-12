@@ -301,7 +301,7 @@ class Graph:
         train_fn = helper.train_adversarial_epoch if self.adv_training else helper.train_epoch
 
         epoch_restart = helper.compute_restart_epoch(self)
-
+        print(epoch_restart)
         for self.epoch in trange(self.nb_epochs, desc="Epoch"):
             if coord.should_stop():
                 break
