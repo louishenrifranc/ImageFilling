@@ -27,7 +27,7 @@ To assess the quality of the embedding created, I created a little script to plo
 I am hopping that sentences which have relative same meaning, should be closed in space. Because the vector generated is 4800 long, I needed a manifold learning algorithm. In Tensorflow, it is possible to used PCA, or t-SNE to visualize them in 3 dimensions. 
 Another way, without plotting them, would be to do a nearest neighbor search. 
 
-Here are some results (code is in _helper\_visualize.py_, make sure you create a metadata.tsv file before containing captions): 
+Here are some results (code is in _helper\_visualize.py_, make sure you create a metadata.tsv file before containing captions):  
 (Notes: Every caption has an embedding, which means that every image appears five times in the plot, I am hopping they are close).
 #### Similar captions in PCA
 
@@ -63,7 +63,7 @@ I tried three experiments. __This ten images have never been seen by the model__
 ![](images/not_mean_caption.PNG)
 
 I really wanted to say "Yes embedding makes the difference", but as far as I know, I don't see any differences. And if I see some differences sometimes, I guess it's because I want to see them...  
-I have some insights why the model didn't need them, but I am open to discuss this (does StackGAN can't generalize on variousworks because it was trained only on very specific captions: flower or birds?).  
+I have some insights why the model didn't need them, but I am open to discuss this (StackGAN results are very domain specific: drawing birds or flower).  
 
 # Model
 ## A. Queues and data augmentation

@@ -59,10 +59,10 @@ class Graph:
         self.z = helper.sample(self._mean, self._log_sigma)
 
         # Encode the image
-        z_vec = self._encoder(self.true_image, self.z)
+        self.z_vec = self._encoder(self.true_image, self.z)
 
         # Decode the image
-        self.reconstructed_hole = self._decoder(z_vec)
+        self.reconstructed_hole = self._decoder(self.z_vec)
         self.generated_image = helper.reconstructed_image(self.reconstructed_hole, self.true_image)
         self._losses()
         self._adversarial_loss()
@@ -318,9 +318,9 @@ class Graph:
 
     def fill_image(self, num_images):
         _, self.summary_writer = helper.restore(self, logs_folder="prediction/")
+
         tf.train.start_queue_runners(sess=self.sess)
 
-        coord = tf.train.Coordinator()
         self.batch_size = num_images
         _, summary_str = self.sess.run([self.generated_image, self.merged_summary_op],
                                        feed_dict={self.is_training: False})
