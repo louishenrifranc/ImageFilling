@@ -162,6 +162,8 @@ In compensation, gradients of the discriminator need to be clipped to small valu
 As of now, it does not help the model, and I observed that the inside generated images become completely off-context (It fill the images with a squared blurry images which does not have the same color).  
 I need to fix it.  
 
+### Regularization
+
 ### Preliminary results
 * Loss functions (refer to the code, some of them are plotted but are not currently used ... all gan loss). Introduced decaying dropout at 80k iterations (80k backward pass):  
     <details> 
@@ -195,7 +197,9 @@ I need to fix it.
     </details>
 
 I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
+
  
+
 # Clame
 * I write as I think, and my english is far from perfect, sorry if reading this is hurting your eyes.  
 * Contribute or ask questions in _Issues_, if you want :)
