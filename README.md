@@ -129,7 +129,7 @@ Code is in ```model.py```
     ![](images/batch_norm.jpg)  
 </details>
 
-* no dropout yet
+* dropout every three layers
 * batch size is small (gpu is never fully loaded), but I found experimentally helping the optimization process.  
 
 ### 2. Loss function
@@ -163,9 +163,38 @@ As of now, it does not help the model, and I observed that the inside generated 
 I need to fix it.  
 
 ### Regularization
+I added dropout as a regularizer in the middle of the training.  
+#### Test set images
+I didn't found any improvement on unseen pictures:
+<details> 
+   <summary>Truth image</summary>
+    ![](images/dp_truth_image.PNG)  
+</details>
+<details> 
+  <summary>With dropout</summary>
+    ![](images/wt_dropout.PNG)  
+</details>
+<details> 
+  <summary>Without dropout</summary>
+    ![](images/without_dropout.PNG)  
+</details>
 
+#### Training set images
+However, I think it helps the model to not overfit on the training set, as you can see on this images. Without dropout, it's difficult to see the frontier between the holes fitted and the border, which is not true with dropout.
+<details> 
+   <summary>Truth image</summary>
+    ![](images/dp_truth_image_train.PNG)  
+</details>
+<details> 
+  <summary>With dropout</summary>
+    ![](images/wt_dropout_train.PNG)  
+</details>
+<details> 
+  <summary>Without dropout</summary>
+    ![](images/without_dropout_train.PNG)  
+</details>
 ### Preliminary results
-* Loss functions (refer to the code, some of them are plotted but are not currently used ... all gan loss). Introduced decaying dropout at 80k iterations (80k backward pass):  
+* Loss functions:  
     <details> 
     <summary>All loss functions</summary>
         ![](images/loss_f.PNG)
@@ -197,9 +226,7 @@ I need to fix it.
     </details>
 
 I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
-
  
-
 # Clame
 * I write as I think, and my english is far from perfect, sorry if reading this is hurting your eyes.  
 * Contribute or ask questions in _Issues_, if you want :)
