@@ -153,7 +153,7 @@ I don't have a long experience with GAN's but every time I wanted to train them,
 For this project, I decided to give a shot to the recent WGAN. As far as I understood, the paper claims we can train discriminator to convergence, then train the generator on it. 
     <details> 
     <summary></summary>
-        ![](images/d_optimum.jpeg)  
+        ![](images/d_optimum.jpg)  
     </details>
   
 In compensation, gradients of the discriminator need to be clipped to small values... but we don't need a sigmoid at the end of the D, which is also responsible for vanishing the gradient. 
