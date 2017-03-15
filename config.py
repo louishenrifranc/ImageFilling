@@ -23,7 +23,7 @@ __C.train.optimizer = tf.train.AdamOptimizer()
 # Embedding values
 __C.emb = edict()
 __C.emb.nb_lang = 100
-__C.emb.emb_dim = 100
+__C.emb.emb_dim = 200
 
 # Generator values
 __C.gen = edict()
