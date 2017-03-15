@@ -41,7 +41,7 @@ def build_examples():
         nb_records = len([n for n in os.listdir(path_to_save_examples) if n.startswith(name)])
         # The file number to restart from
         iter_to_restart = (nb_records - 1) * nb_file_per_tfrecords
-
+        iter_to_restart = 79000
         for iter in trange(iter_to_restart, nb_file, nb_file_per_tfrecords):
             writer = tf.python_io.TFRecordWriter(
                 os.path.join(path_to_save_examples, "{}{}".format(name, iter // nb_file_per_tfrecords) + ".tfrecords"))
@@ -60,6 +60,7 @@ def build_examples():
                 writer.write(ex.SerializeToString())
 
             writer.close()
+            break
 
 
 

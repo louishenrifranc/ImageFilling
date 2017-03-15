@@ -4,9 +4,10 @@ from pprint import pprint
 graph_saver = tf.train.import_meta_graph("model/model-80058.meta")
 graph = tf.get_default_graph()
 
+graph.get_operation_by_name("decoder/node5/")
 sess = tf.Session(graph=graph)
 print("Activation")
-pprint([var.op.name for var in tf.get_collection(tf.GraphKeys.ACTIVATIONS)])
+pprint([var.op.name for var in tf.get_collection(tf.GraphKeys.)])
 print("Global variables")
 pprint([var.op.name for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)])
 print("Trainable variables")
