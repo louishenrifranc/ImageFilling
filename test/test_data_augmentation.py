@@ -3,6 +3,8 @@ import tensorflow as tf
 import sys
 import os
 
+import numpy as np
+
 sys.path.append("..")
 from data_augmentation import rotate
 
@@ -44,8 +46,9 @@ def read_and_decode(filename_queue,
     # Reshape the image. Here the number of channel varies between sample
     # Some images are 1D channel, some other are 3D
     image = tf.reshape(image, (64, 64, -1))
+    image_unit32 = 2 * tf.image.convert_image_dtype(image, dtype=tf.float32) - 1
 
-    image_unit32 = image
+    # image_unit32 = tf.image.rgb_to_hsv(image)
     # If number of channel is 1  -> modify to rgb scale
     image_unit32 = tf.cond(pred=tf.equal(tf.shape(image_unit32)[2], 3),
                            fn1=lambda: image_unit32,
@@ -53,8 +56,7 @@ def read_and_decode(filename_queue,
 
     # Need to define the true shape
     image_unit32.set_shape((64, 64, 3))
-    image_unit32 = rotate(image_unit32, 30)
-    image_unit32 = tf.cast(image_unit32, tf.int32)
+    # image_unit32 = rotate(image_unit32, 30)
 
     min_queue_examples = 256  # Shuffle elements
 
@@ -97,5 +99,7 @@ if __name__ == '__main__':
         out = sess.run(images)
 
         for b in range(batch_size):
-            plt.imshow(out[0][b])
-            plt.show()
+            ou = out[0][b]
+            print(np.mean(ou))
+            print(np.max(ou))
+            print(np.min(ou))

@@ -26,18 +26,19 @@ def read_and_decode(filename_queue,
     )
 
     image = tf.decode_raw(context_parsed["img"], tf.uint8)
+
+    image = 2 * tf.image.convert_image_dtype(image, dtype=tf.float32) - 1
+
     image = tf.reshape(image, (64, 64, -1))
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     image = tf.cond(pred=tf.equal(tf.shape(image)[2], 3), fn2=lambda: tf.image.grayscale_to_rgb(image),
                     fn1=lambda: image)
     if flip:
         image = tf.image.random_flip_left_right(image)
 
-    # if contrast:
-    #     image = tf.image.random_contrast(image,
-    #                                      lower=0.8, upper=1.2)
-    # image = tf.image.random_brightness(image, max_delta=100)
     image.set_shape((64, 64, 3))
+
+    # image = tf.image.rgb_to_hsv(image)
+
     inside_image = tf.image.central_crop(image, 0.50)
     inside_image.set_shape((32, 32, 3))
 
@@ -91,11 +92,11 @@ def read_and_decode(filename_queue,
             min_after_dequeue=min_queue_examples)
         inputs.append(wrong_images[0])
 
-    images = tf.train.shuffle_batch(
+    images = tf.train.batch(
         inputs,
         batch_size=batch_size,
-        capacity=min_queue_examples + 3 * batch_size,
-        min_after_dequeue=min_queue_examples)
+        capacity=min_queue_examples + 3 * batch_size)
+    # min_after_dequeue=min_queue_examples)
     return images
 
 
@@ -200,31 +201,17 @@ def train_epoch(model, saving_each_iter=10):
 
 
 def train_adversarial_epoch(model, saving_each_iter=100):
-    n_train_critic = model.cfg.gan.n_train_critic
-    n_train_generator = model.cfg.gan.n_train_generator
+    nb_train_iter = (len(model.cfg.queue.filename) * model.cfg.queue.nb_examples_per_file) // model.batch_size
+    for i in trange(nb_train_iter, leave=False, desc="Training iteration"):
+        op = model.train_gen
+        model.sess.run(op, feed_dict={model.is_training: True})
 
-    j = 0
-
-    if model.epoch < model.cfg.gan.intense_starting_period:
-        n_train_critic = model.cfg.gan.n_train_critic_intense
-    for _ in trange(n_train_critic, desc="Train critic", leave=False):
         op = [model.train_dis]
-        j += 1
-        if j % saving_each_iter == 0:
+        if i % saving_each_iter == 0:
             op.append(model.merged_summary_op)
         out = model.sess.run(op, feed_dict={model.is_training: True})
-        if j % saving_each_iter == 0:
-            current_iter = model.sess.run(model.global_step)
-            model.summary_writer.add_summary(out[1], global_step=current_iter)
 
-    for _ in trange(n_train_generator, desc="Train generator", leave=False):
-        op = [model.train_gen]
-        j += 1
-        if j % saving_each_iter == 0:
-            op.append(model.merged_summary_op)
-
-        out = model.sess.run(op, feed_dict={model.is_training: True})
-        if j % saving_each_iter == 0:
+        if i % saving_each_iter == 0:
             current_iter = model.sess.run(model.global_step)
             model.summary_writer.add_summary(out[1], global_step=current_iter)
 
@@ -241,11 +228,15 @@ def compute_restart_epoch(model):
         return current_step // (
             (len(model.cfg.queue.filename) * model.cfg.queue.nb_examples_per_file) // model.batch_size)
     else:
-        n_iter_starting = model.cfg.gan.n_train_critic_intense * model.cfg.gan.intense_starting_period \
-                          + model.cfg.gan.n_train_generator
-        if current_step - n_iter_starting >= 0:
-            current_step -= n_iter_starting
-            n_iter = model.cfg.gan.n_train_critic + model.cfg.gan.n_train_generator
-            return current_step // n_iter
-        else:
-            return current_step // n_iter_starting
+        res = current_step // (
+            (len(model.cfg.queue.filename) * model.cfg.queue.nb_examples_per_file) // model.batch_size)
+        return res / 2
+        # n_iter_starting = model.cfg.gan.n_train_critic_intense * model.cfg.gan.intense_starting_period \
+
+#                   + model.cfg.gan.n_train_generator
+# if current_step - n_iter_starting >= 0:
+#     current_step -= n_iter_starting
+#     n_iter = model.cfg.gan.n_train_critic + model.cfg.gan.n_train_generator
+#     return current_step // n_iter
+# else:
+#     return current_step // n_iter_starting
