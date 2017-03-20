@@ -48,8 +48,7 @@ Here are some results (code is in _helper\_visualize.py_, make sure you create a
 __Take home message:__
 I think embedding trained with the Skip-Though vector model have captured some interesting semantic of the captions but ....
 
-### Are they influencing the model
-See model section to see the current model used. 
+### Are they influencing the model? (80K iteration experiment)
 No, not at all. To prove that, I did some experiments. 
 
 I tried three experiments. __This ten images have never been seen by the model__, __I re-run every experiments twice__:
@@ -83,70 +82,71 @@ tldr: I used a technique I found in the recent StackGan architecture. They advan
 * "To further enforce the smoothness over the conditioning manifold and avoid overfitting, we add the following regularization term to the objective of the generator during training".. KL divergence. 
 
 After seeing the results from the paper, I was convinced it will help the "generative" model (in the sense of generating images) towards the tasks of filling images.
-Here is the plot of the KL loss. During the first iterations, I saw it going down, but afterwards it restart to going up. Note that the large increase of the curve represents the moment when I introduced new examples to the model, so I guess the KL divergence is responsible of avoiding some overfitting.
+Here is the plot of the KL loss. During the first iterations, I saw it going down, but afterwards it restart to going up. Note that the large increase of the curve represents the moment when I introduced new examples to the model.
 ![](images/kl_loss.PNG)  
 
-Before sampling from a normal distribution, embedding, five in total per images, are averaged. I did this, because based on the previous embedding plots, I think averaging embeddings should give me the a point in the high dimension space which has some notions of the semantic from every captions. 
-__Notes__: I know here are some more advanced technique such as using a recurrent neural network, but in this configuration, i don't think averaging should harm the training model.  
+Before sampling from a normal distribution, embedding, five in total per images, are averaged. I did this, because based on the previous embedding plots, I think averaging embeddings should give me the a point in the high dimension space which has some notions of the semantic from every captions.  
+__Notes__: There are some more advanced technique such as using a recurrent neural network, but in this configuration, i don't think averaging should harm the training model.  
 
-The average of all captions is then passed into a fully connected, which output a mean and (log) variance. Using the reparametrization-trick on a Gaussian(0, 1), it is possible to sample from this distribution. A vector of dimension 100 is sampled from this distribution. It should represent the embedding. This technique became popular with variationnal neural auto encoder. 
+The average of all captions is then passed into a fully connected, which output a mean and (log) variance. Using the reparametrization-trick on a Gaussian(0, 1), it is possible to sample from this conditionned gaussian distribution. The size of the sampled vector is 100. 
 
 ## C. Auto-Encoder
 ### 1. Architecture
 I did a pretty deep neural network (~30 layers), but it's basically a encoder-decoder with a lot of residual blocks in the decoder. I didn't use anything special between the encoder and the encoder, some people are using channel wise, I think passing the channel is better. The embedding is stacked on top of convolution channels (4x4x512 + 4x4x100). An embedding is replicated in all 4x4 dimensions. 
-Code is in ```model.py```  
-* Recently, I also try a deeper model, with more convolution at the end of the reconstruction, but it was a failure. Image generated were blurry. 
+Code is in ```model.py```.   
+Recently, I also try a deeper model, with more convolution at the end of the reconstruction, but it was a failure. Image generated were blurry. 
 
 #### Side notes on why my first model is performing the best
 First model was the best, eventhough it had some flaws in its code.  (For example, all pixels were in [0, 1])  
 One reason that could explain how well it performed is because I slowly introduced more and more sample starting with a 5.000 sample, up to 83.000 now.  
 Moreover the introduction of dropout in the middle, really helped the model to learn better reconstruction features, which leads better looking alike generated images.  
-My new experiences consists in lowering the keep probability of dropout, and slowly introducing an adversarial loss.  
 
 #### Miscellaneous
 <!--![Batch normalization all the way long](images/batch_norm.jpg)  /!-->
-* dropout every three layers
-* batch size is small (gpu is never fully loaded), but I found experimentally helping the optimization process.  
+* Dropout every three layers
+* Batch size is small (gpu is never fully loaded), but I found experimentally helping the optimization process.  
+* Batch normalization almost everywhere
 
 ### 2. Loss function
-Classic L2 loss, but for smoothness in the border, I encourage more pixel at the frontier to be closed the truth. When seeing the images generated, I saw the difference of this trick: it really remove the effect of a squared block append on top of the image, which is pretty cool
+Classic L2 loss, but for smoothness in the border, I encourage more pixel at the frontier to be closed to the truth. Seeing the images generated, I saw the difference of this trick: it really remove the effect of a squared block append on top of the image, which is pretty cool.
 
 * Recently, I tried ![total variation denoising](https://en.wikipedia.org/wiki/Total_variation_denoising) on a new model without success. I think it is more usefull as a fine-tuning loss functions for an already trained model.
 
-* Starting L1 loss for sparsity.
+* Need to introduce L1 loss for sparsity.
 
 ### 3. Adversarial cost
 There are out two papers who claimed to remove the blurriness in generated images.
-* One is using neural style transfer, and it takes three minutes to generate a new images. With the recent progress in Neural Style Transfer [google paper](https://arxiv.org/pdf/1610.07629v2.pdf), maybe
+* One is using neural style transfer, and it takes three minutes to generate a new images. With the recent progress in Neural Style Transfer [google paper](https://arxiv.org/pdf/1610.07629v2.pdf), maybe!  
 * The other one, wait for it... is a GAN which try to differentiate between truth generated image and fake ones. The D should have some insights of what is a correct images with wrong captions, so the D should consider truth images, with wrong captions as fake sample. [paper](https://arxiv.org/abs/1604.07379).  
 ![](images/meme.jpeg)  
 
 I don't have a long experience with GAN's but every time I wanted to train them, I had to stay close my computer, because it is very unstable, and whether the G doesn't learn anything, whether G and D loss keeps oscillating.  
 <!-- ![](images/training_gan.jpg) /!-->  
 
-For this project, I decided to give a shot to the recent WGAN. As far as I understood, the paper claims we can train discriminator to convergence, then train the generator on it. In compensation, gradients of the discriminator need to be clipped to small values... but we don't need a sigmoid at the end of the D, which is also responsible for vanishing the gradient. 
+For this project, I decided to give a shot to the recent WGAN. As far as I understood, the paper claims we can train discriminator to convergence, then train the generator on it. In compensation, gradients of the discriminator need to be clipped to small values...  
 * The generator loss become the previous loss defined in 2) + ```tf.reduce_mean(-(features_fake_image + feature_fake_captions)```
 * The discriminator loss is ```tf.reduce_mean(features_fake_image + feature_fake_captions - features_real)```. 
-As of now, it does not help the model, and I observed that the inside generated images become completely off-context (It fill the images with a squared blurry images which does not have the same color).  
+As of now, it does not help the model, and I observed that the inside generated images become completely off-context (It fill the images with a squared blurry images which does not have the same color). 
 I need to fix it.  
 
 ### Regularization
 I added dropout as a regularizer in the middle of the training.  
 
-#### Test set images
-I didn't found any improvement on unseen pictures:
+#### Test set images (without dropout iteration=80K, with dropout iteration=140K)
+There is no improvement in the quality of generated unseen images.
 ![Truth image](images/dp_truth_image.PNG)  
 ![With dropout](images/wt_dropout.PNG)  
 ![Without dropout](images/without_dropout.PNG)  
 
 #### Training set images
-However, I think it helps the model to not overfit on the training set, as you can see on this images. Without dropout, it's difficult to see the frontier between the holes fitted and the border, which is not true with dropout.
+However, it helps the model to not overfit on the training set, as you can see on this images. 
+Without dropout, it's difficult to see the frontier between the holes fitted and the border, which is not true with dropout.
 ![Truth image](images/dp_truth_image_train.PNG)  
 ![With dropout](images/wt_dropout_train.PNG)  
 ![Without dropout](images/without_dropout_train.PNG)  
 
-### Preliminary results
-#### First wave
+### Preliminary results 
+#### First wave (iteration=140K)
 * Loss functions:  
   ![](images/loss_f.PNG)
 
@@ -166,13 +166,19 @@ However, I think it helps the model to not overfit on the training set, as you c
 
 I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
 
-#### Second wave
-I am aggresively turning on dropout, it really seems to overfit my training set:  
+#### Second wave (iteration = 220K)
+I aggresively turned on dropout, because it seemed to overfit my training set. The next images come from the training set:
 ![](images/new_running_experiment.PNG)
 ![](images/new_running_experiment2.PNG)
 ![](images/new_running_experiment3.PNG)  
 and the true image, to see the difference
-![](images/new_running_experiment3_true.PNG)
+![](images/new_running_experiment3_true.PNG)  
+
+Results on the testing set:
+* Generated image: 
+![](images/new_running_experiment_test_fake.PNG)  
+* True image:
+![](images/new_running_experiment_test_true.PNG)  
 
 # RoadMap
 - [X] Finish generating embeddings

@@ -109,6 +109,7 @@ class Graph:
             # 4 * 4 * 512
             node2 = tf_utils.cust_conv2d(node2, 512, h_f=3, w_f=3, h_s=1, w_s=1, activation_fn=None,
                                          is_training=self.is_training, scope_name="node2_3")
+            
             node2 = ly.dropout(node2, keep_prob=0.5, is_training=self.is_training)
             # 4 * 4 * 512
             node = tf.add(node1, node2)
@@ -271,9 +272,6 @@ class Graph:
         Helper to add summaries
         :return:
         """
-        trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        for var in trainable_variable:
-            tf.summary.histogram(var.op.name, var)
 
         # Add summaries for images
         num_images = self.batch_size
