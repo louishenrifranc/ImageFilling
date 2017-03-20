@@ -12,12 +12,19 @@ class Graph:
 
         self.adv_training = args.gan.train_adversarial
 
-        self.optimizer = args.train.optimizer
         # Placeholder
         self.is_training = tf.placeholder(tf.bool)
 
         # Global step
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
+
+        self.learning_rate = tf.train.exponential_decay(0.001, self.global_step,
+                                                        20000, 0.96, staircase=True)
+
+
+        self.decay_dropout = tf.train.exponential_decay(1.0, self.global_step,
+                                                        20000, 0.96, staircase=True)
+        self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
 
         # Input filename
         self.cfg = args
@@ -55,17 +62,21 @@ class Graph:
 
         self._mean, self._log_sigma = self._generate_condition(self.mean_caption)
 
+        self.cropped_image = tf.map_fn(lambda x: tf.image.per_image_standardization(x), self.cropped_image)
+
         # Sample conditioning from a Gaussian distribution parametrized by a Neural Network
         self.z = helper.sample(self._mean, self._log_sigma)
 
-        # Encode the image
-        self.z_vec = self._encoder(self.true_image, self.z)
+        # z = tf.reshape(self.z, (self.batch_size, 5, self.cfg.emb.emb_dim))
 
-        # Decode the image
-        self.reconstructed_hole = self._decoder(self.z_vec)
+        encoded = self._encoder(self.cropped_image, self.z)
+        self.reconstructed_hole = self._decoder(encoded)
         self.generated_image = helper.reconstructed_image(self.reconstructed_hole, self.true_image)
+
         self._losses()
+
         self._adversarial_loss()
+
         self._optimize()
         self._summaries()
 
@@ -73,9 +84,11 @@ class Graph:
         with tf.variable_scope(scope_name) as scope:
             if scope_reuse:
                 scope.reuse_variables()
+
             out = ly.fully_connected(sentence_embedding,
                                      self.cfg.emb.emb_dim * 2,
                                      activation_fn=tf_utils.leaky_rectify)
+
             mean = out[:, :self.cfg.emb.emb_dim]
             log_sigma = out[:, self.cfg.emb.emb_dim:]
             # emb_dim
@@ -85,31 +98,36 @@ class Graph:
         with tf.variable_scope(scope_name) as scope:
             if reuse_variables:
                 scope.reuse_variables()
-
-            images = ly.dropout(images, keep_prob=0.85, is_training=self.is_training)
             # Encode image
             # 32 * 32 * 64
+            images = ly.dropout(images, keep_prob=self.decay_dropout, is_training=self.is_training)
             node1 = tf_utils.cust_conv2d(images, 64, h_f=4, w_f=4, batch_norm=False, scope_name="node1")
             # 16 * 16 * 128
             node1 = tf_utils.cust_conv2d(node1, 128, h_f=4, w_f=4, is_training=self.is_training, scope_name="node1_1")
             # 8 * 8 * 256
+            if scope_name == "discriminator":
+                node1 = ly.dropout(node1, keep_prob=self.decay_dropout, is_training=self.is_training)
+
             node1 = tf_utils.cust_conv2d(node1, 256, h_f=4, w_f=4, is_training=self.is_training, scope_name="node1_2")
             # 4 * 4 * 512
             node1 = tf_utils.cust_conv2d(node1, 512, h_f=4, w_f=4, activation_fn=None, is_training=self.is_training,
                                          scope_name="node1_3")
-            
-            node1 = ly.dropout(node1, keep_prob=0.6, is_training=self.is_training)
-            
+
+            node1 = ly.dropout(node1, keep_prob=self.decay_dropout, is_training=self.is_training)
+
             # 4 * 4 * 128
             node2 = tf_utils.cust_conv2d(node1, 256, h_f=1, w_f=1, h_s=1, w_s=1, is_training=self.is_training,
                                          scope_name="node2_1")
             # 4 * 4 * 128
             node2 = tf_utils.cust_conv2d(node2, 256, h_f=3, w_f=3, h_s=1, w_s=1, is_training=self.is_training,
                                          scope_name="node2_2")
+
             # 4 * 4 * 512
             node2 = tf_utils.cust_conv2d(node2, 512, h_f=3, w_f=3, h_s=1, w_s=1, activation_fn=None,
                                          is_training=self.is_training, scope_name="node2_3")
-            node2 = ly.dropout(node2, keep_prob=0.6, is_training=self.is_training)
+
+            node2 = ly.dropout(node2, keep_prob=self.decay_dropout, is_training=self.is_training)
+
             # 4 * 4 * 512
             node = tf.add(node1, node2)
             node = tf_utils.leaky_rectify(node)
@@ -127,8 +145,13 @@ class Graph:
             # 4 * 4 * 256
             result = tf_utils.cust_conv2d(comb, 512, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node3")
             result = tf_utils.cust_conv2d(result, 256, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node4")
+
             if scope_name == "discriminator":
                 result = tf_utils.cust_conv2d(result, 128, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node5")
+                result = tf_utils.cust_conv2d(result, 64, h_f=3, w_f=3, w_s=2, h_s=2, scope_name="node6")
+
+                result = tf_utils.cust_conv2d(result, 16, h_f=3, w_f=3, w_s=2, h_s=2, scope_name="node7")
+                result = tf.reshape(result, (self.batch_size, 16))
             return result
 
     def _decoder(self, input, scope_name="decoder"):
@@ -187,26 +210,51 @@ class Graph:
             # 32 x 32 x 8
             node3_0 = tf_utils.cust_conv2d_transpose(node3, 32, h_s=2, w_s=2, is_training=self.is_training,
                                                      scope_name="node3")
-            # 16 * 16 * 8
+            # 32 * 32 * 16
             node3_1 = tf_utils.cust_conv2d(node3_0, 16, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node3_1")
-            # 16 * 16 * 8
+            # 32 * 32 * 16
             node3_1 = tf_utils.cust_conv2d(node3_1, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node3_2")
-            # 16 * 16 * 16
+            # 32 * 32 * 32
             node3_1 = tf_utils.cust_conv2d(node3_1, 32, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node3_3")
 
             node4 = tf.add(node3_0, node3_1)
-
+            # 32 * 32 * 16
             node4_1 = tf_utils.cust_conv2d(node4, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node4_1")
-            node4_1 = tf_utils.cust_conv2d(node4_1, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+            # 32 * 32 * 8
+            node4_2 = tf_utils.cust_conv2d(node4_1, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node4_2")
 
+            # 32 * 32 * 8
+            node4_2 = tf_utils.cust_conv2d(node4_2, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node4_3")
+
+            node4_2 = tf_utils.cust_conv2d(node4_2, 16, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node4_4")
+
+            node5 = tf.add(node4_1, node4_2)
+
+            node5_1 = tf_utils.cust_conv2d(node5, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node5_1")
+            # 32 * 32 * 8
+            node5_2 = tf_utils.cust_conv2d(node5_1, 4, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node5_2")
+
+            # 32 * 32 * 8
+            node5_2 = tf_utils.cust_conv2d(node5_2, 4, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node5_3")
+
+            node5_2 = tf_utils.cust_conv2d(node5_2, 8, h_f=3, w_f=3, w_s=1, h_s=1, is_training=self.is_training,
+                                           scope_name="node5_4")
+
+            node6 = tf.add(node5_1, node5_2)
+
             # 32 x 32 x 3
-            out = tf_utils.cust_conv2d(node4_1, 3, h_f=1, w_f=1, w_s=1, h_s=1, activation_fn=tf.tanh,
-                                       is_training=self.is_training, scope_name="node5")
+            out = tf_utils.cust_conv2d(node6, 3, h_f=1, w_f=1, w_s=1, h_s=1, activation_fn=tf.tanh,
+                                       is_training=self.is_training, scope_name="node6")
             return out
 
     def _adversarial_loss(self, scope_name="discriminator"):
@@ -216,14 +264,27 @@ class Graph:
 
         train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.gen_variables = [v for v in train_variables if not v.name.startswith("discriminator")]
-        self.dis_variables = [v for v in train_variables if v.name.startswith("discriminator")]
+        from pprint import pprint
+        pprint([var.op.name for var in self.gen_variables])
 
-        self.dis_loss = tf.reduce_mean(wrong_logit + fake_logit - real_logit)
-        self.gen_loss = tf.reduce_mean(-fake_logit - wrong_logit)
+        self.dis_variables = [v for v in train_variables if v.name.startswith("discriminator")]
+        pprint([var.op.name for var in self.dis_variables])
+
+        real_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logit,
+                                                                            labels=tf.ones_like(real_logit)))
+        wrong_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=wrong_logit,
+                                                                             labels=tf.zeros_like(wrong_logit)))
+
+        fake_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logit,
+                                                                            labels=tf.zeros_like(fake_logit)))
+        self.dis_loss = real_dloss + (wrong_dloss + fake_dloss) / 2
+
+        self.gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logit,
+                                                                               labels=tf.ones_like(fake_logit)))
 
         self.all_loss_G = self.gen_loss * 0.1 + (self.kl_loss + self._loss_recon_center
                                                  + self._loss_recon_overlap) * 0.9
-        self.all_loss_D = self.dis_loss * 0.1
+        self.all_loss_D = self.dis_loss
 
         W_G = filter(lambda x: x.name.endswith('weights:0'), self.gen_variables)
         W_D = filter(lambda x: x.name.endswith('weights:0'), self.dis_variables)
@@ -232,7 +293,7 @@ class Graph:
         self.all_loss_D += 0.00001 * tf.reduce_mean(tf.stack([tf.nn.l2_loss(x) for x in W_D]))
 
         grads_var_dis = self.optimizer.compute_gradients(loss=self.dis_loss, var_list=self.dis_variables)
-        grads_var_dis = map(lambda gv: [tf.clip_by_value(gv[0], -0.1, 0.1), gv[1]], grads_var_dis)
+        grads_var_dis = map(lambda gv: [tf.clip_by_value(gv[0], -10, 10), gv[1]], grads_var_dis)
         self.train_dis = self.optimizer.apply_gradients(grads_var_dis, global_step=self.global_step)
 
         grads_var_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
@@ -271,19 +332,21 @@ class Graph:
         Helper to add summaries
         :return:
         """
-        # trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        # for var in trainable_variable:
-        #     tf.summary.histogram(var.op.name, var)
-
         # Add summaries for images
-        num_images = self.batch_size
+        num_images = 10
         tf.summary.image(name="crop_image", tensor=self.cropped_image, max_outputs=num_images)
         tf.summary.image(name="true_hole", tensor=self.true_hole, max_outputs=num_images)
-        tf.summary.image(name="reconstructed_hole", tensor=self.reconstructed_hole, max_outputs=num_images)
+        tf.summary.image(name="reconstructed_hole", tensor=self.reconstructed_hole,
+                         max_outputs=num_images)
         tf.summary.image(name="true_image", tensor=self.true_image, max_outputs=num_images)
-        tf.summary.image(name="reconstructed_image", tensor=self.generated_image, max_outputs=num_images)
+        tf.summary.image(name="reconstructed_image", tensor=self.generated_image,
+                         max_outputs=num_images)
 
         # Add summaries for loss functions
+
+        tf.summary.scalar(name="learning_rate", tensor=self.learning_rate)
+        tf.summary.scalar(name="dropout", tensor=self.decay_dropout)
+
         tf.summary.scalar(name="loss_recon_center", tensor=self._loss_recon_center)
         tf.summary.scalar(name="loss_recon_overlap", tensor=self._loss_recon_overlap)
         tf.summary.scalar(name="kl_loss", tensor=self.kl_loss)
@@ -299,14 +362,17 @@ class Graph:
 
         self.saver, self.summary_writer = helper.restore(self)
 
-        tf.train.start_queue_runners(sess=self.sess)
-
         coord = tf.train.Coordinator()
+        tf.train.start_queue_runners(sess=self.sess, coord=coord)
 
         train_fn = helper.train_adversarial_epoch if self.adv_training else helper.train_epoch
 
+        current_iter = self.sess.run(self.global_step)
+        self.saver.save(self.sess, "model/model", global_step=current_iter)
+
         epoch_restart = helper.compute_restart_epoch(self)
-        print(epoch_restart)
+
+        print("Restart epoch: {}, current iteration: {}\n".format(epoch_restart, current_iter))
         for self.epoch in trange(self.nb_epochs, desc="Epoch"):
             if coord.should_stop():
                 break
@@ -320,13 +386,13 @@ class Graph:
         coord.request_stop()
         coord.join()
 
-    def fill_image(self, num_images):
+    def fill_image(self):
         _, self.summary_writer = helper.restore(self, logs_folder="prediction/")
 
         tf.train.start_queue_runners(sess=self.sess)
 
-        self.batch_size = num_images
         _, summary_str = self.sess.run([self.generated_image, self.merged_summary_op],
                                        feed_dict={self.is_training: False})
+
         self.summary_writer.add_summary(summary_str)
         self.summary_writer.flush()

@@ -18,6 +18,7 @@ __C.obj.dic = {}
 __C.train = edict()
 __C.train.batch_size = 16
 __C.train.nb_epochs = 1500
+__C.train.optimizer = tf.train.AdamOptimizer()
 
 # Embedding values
 __C.emb = edict()

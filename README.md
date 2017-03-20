@@ -33,29 +33,17 @@ Here are some results (code is in _helper\_visualize.py_, make sure you create a
 #### Similar captions in PCA
 
 * I was searching for **computer** and pick the first caption _"A cat laying on top of a computer keyboard_. I restrict the point in space to the closest 100 points. It seems that similar caption contains whether a computer, whether a cat, or a keyboard, which are all part of the caption... Good start.
-<details> 
-  <summary>PCA plot 1</summary>
-   ![](images/computer_embedding.PNG)
-</details>
+![PCA plot 1](images/computer_embedding.PNG)
 
 * While training the model for filling holes, I was amazed by how elephants where nicely fit, so I looked at closed captions of _"A herd of elephants standing next to each other"_. The computed nearest neighbors are elephant, giraffe, or zebras and others...
-<details> 
-  <summary>PCA plot 2</summary>
-    ![](images/elephant.PNG)
-</details>
+![PCA plot 2](images/elephant.PNG)
 
 #### Exploring the points with t-SNE
 * Picture of people skiing  
-<details> 
-  <summary>t-SNE plot 1</summary>
-    ![](images/snow_images.PNG)
-</details>
+![t-SNE plot 1](images/snow_images.PNG)
 
 * London red bus (or bus in general)  
-<details> 
-  <summary>t-SNE plot 2</summary>
-    ![](images/red_bus.PNG)
-</details>
+![t-SNE plot 2](images/red_bus.PNG)
 
 __Take home message:__
 I think embedding trained with the Skip-Though vector model have captured some interesting semantic of the captions but ....
@@ -66,33 +54,21 @@ No, not at all. To prove that, I did some experiments.
 
 I tried three experiments. __This ten images have never been seen by the model__, __I re-run every experiments twice__:
 * Replace embedding by random noise (noise is sample from a Gaussian distribution(0; 0.7))
-<details> 
-  <summary>First experiment results</summary>
-    ![](images/first_training_example_with_false_embeddings.PNG)
-    ![](images/second_training_example_with_fake_embeddings.PNG)
-</details>
+![](images/first_training_example_with_false_embeddings.PNG)
+![](images/second_training_example_with_fake_embeddings.PNG)
 
 
 * True sampling from the Gaussian distribution with mean and variance coming from the fully connected.
-<details> 
-  <summary>Second experiment results</summary>
-    ![](images/first_training_example_with_good_embeddings.PNG)
-    ![](images/second_training_example_with_good_embeddings.PNG)
-</details>
+![](images/first_training_example_with_good_embeddings.PNG)
+![](images/second_training_example_with_good_embeddings.PNG)
 
 * Replace averaging embedding by selecting only one embedding
-<details> 
-  <summary>First experiments results</summary>
-    ![](images/not_mean_caption.PNG)
-</details>
+![](images/not_mean_caption.PNG)
 
 
 I really wanted to say "Yes embedding makes the difference", but as far as I know, I don't see any differences. And if I see some differences sometimes, I guess it's because I want to see them...  
 I have some insights why the model didn't need them, but I am open to discuss this (StackGAN results are very domain specific: drawing birds or flower.).  
-<details> 
-  <summary></summary>
-    ![](images/powerful.jpg)  
-</details>
+![](images/powerful.jpg)  
 
 # Model
 ## A. Queues and data augmentation
@@ -108,10 +84,7 @@ tldr: I used a technique I found in the recent StackGan architecture. They advan
 
 After seeing the results from the paper, I was convinced it will help the "generative" model (in the sense of generating images) towards the tasks of filling images.
 Here is the plot of the KL loss. During the first iterations, I saw it going down, but afterwards it restart to going up. Note that the large increase of the curve represents the moment when I introduced new examples to the model, so I guess the KL divergence is responsible of avoiding some overfitting.
-<details> 
-  <summary>KL loss plot</summary>
-    ![](images/kl_loss.PNG)  
-</details>
+![](images/kl_loss.PNG)  
 
 Before sampling from a normal distribution, embedding, five in total per images, are averaged. I did this, because based on the previous embedding plots, I think averaging embeddings should give me the a point in the high dimension space which has some notions of the semantic from every captions. 
 __Notes__: I know here are some more advanced technique such as using a recurrent neural network, but in this configuration, i don't think averaging should harm the training model.  
@@ -121,14 +94,17 @@ The average of all captions is then passed into a fully connected, which output 
 ## C. Auto-Encoder
 ### 1. Architecture
 I did a pretty deep neural network (~30 layers), but it's basically a encoder-decoder with a lot of residual blocks in the decoder. I didn't use anything special between the encoder and the encoder, some people are using channel wise, I think passing the channel is better. The embedding is stacked on top of convolution channels (4x4x512 + 4x4x100). An embedding is replicated in all 4x4 dimensions. 
-Code is in ```model.py```
+Code is in ```model.py```  
+* Recently, I also try a deeper model, with more convolution at the end of the reconstruction, but it was a failure. Image generated were blurry
+
+#### Side notes on why my first model is performing the best
+I am really amazed by my first training model. It had some flaws in its code, but it is still my best model so far.  (For example, all pixels were in [0, 1])  
+One reason that could explain how well it performed is because I slowly introduced more and more sample starting with a 5.000 sample, up to 83.000 now. I never get good results when I started a new model, with all the sample at the beginning.  
+Moreover the introduction of dropout in the middle, really helped the model to learn better reconstruction features, which leads better looking alike generated images.  
+My new experiences consists in lowering the keep probability of dropout, and slowly introducing an adversarial loss.  
 
 #### Miscellaneous
-<details> 
-  <summary>Batch normalization all the way long</summary>
-    ![](images/batch_norm.jpg)  
-</details>
-
+<!--![Batch normalization all the way long](images/batch_norm.jpg)  /!-->
 * dropout every three layers
 * batch size is small (gpu is never fully loaded), but I found experimentally helping the optimization process.  
 
@@ -139,24 +115,12 @@ Classic L2 loss, but for smoothness in the border, I encourage more pixel at the
 There are out two papers who claimed to remove the blurriness in generated images.
 * One is using neural style transfer, and it takes three minutes to generate a new images. With the recent progress in Neural Style Transfer [google paper](https://arxiv.org/pdf/1610.07629v2.pdf), maybe
 * The other one, wait for it... is a GAN which try to differentiate between truth generated image and fake ones. The D should have some insights of what is a correct images with wrong captions, so the D should consider truth images, with wrong captions as fake sample. [paper](https://arxiv.org/abs/1604.07379).  
-<details> 
-  <summary></summary>
-    ![](images/meme.jpeg)  
-</details>
+![](images/meme.jpeg)  
 
 I don't have a long experience with GAN's but every time I wanted to train them, I had to stay close my computer, because it is very unstable, and whether the G doesn't learn anything, whether G and D loss keeps oscillating.  
-    <details> 
-      <summary></summary>
-        ![](images/training_gan.jpg)  
-    </details>
+<!-- ![](images/training_gan.jpg) /!-->  
 
-For this project, I decided to give a shot to the recent WGAN. As far as I understood, the paper claims we can train discriminator to convergence, then train the generator on it. 
-    <details> 
-    <summary></summary>
-        ![](images/d_optimum.jpg)  
-    </details>
-  
-In compensation, gradients of the discriminator need to be clipped to small values... but we don't need a sigmoid at the end of the D, which is also responsible for vanishing the gradient. 
+For this project, I decided to give a shot to the recent WGAN. As far as I understood, the paper claims we can train discriminator to convergence, then train the generator on it. In compensation, gradients of the discriminator need to be clipped to small values... but we don't need a sigmoid at the end of the D, which is also responsible for vanishing the gradient. 
 * The generator loss become the previous loss defined in 2) + ```tf.reduce_mean(-(features_fake_image + feature_fake_captions)```
 * The discriminator loss is ```tf.reduce_mean(features_fake_image + feature_fake_captions - features_real)```. 
 As of now, it does not help the model, and I observed that the inside generated images become completely off-context (It fill the images with a squared blurry images which does not have the same color).  
@@ -164,72 +128,49 @@ I need to fix it.
 
 ### Regularization
 I added dropout as a regularizer in the middle of the training.  
+
 #### Test set images
 I didn't found any improvement on unseen pictures:
-<details> 
-   <summary>Truth image</summary>
-    ![](images/dp_truth_image.PNG)  
-</details>
-<details> 
-  <summary>With dropout</summary>
-    ![](images/wt_dropout.PNG)  
-</details>
-<details> 
-  <summary>Without dropout</summary>
-    ![](images/without_dropout.PNG)  
-</details>
+![Truth image](images/dp_truth_image.PNG)  
+![With dropout](images/wt_dropout.PNG)  
+![Without dropout](images/without_dropout.PNG)  
 
 #### Training set images
 However, I think it helps the model to not overfit on the training set, as you can see on this images. Without dropout, it's difficult to see the frontier between the holes fitted and the border, which is not true with dropout.
-<details> 
-   <summary>Truth image</summary>
-    ![](images/dp_truth_image_train.PNG)  
-</details>
-<details> 
-  <summary>With dropout</summary>
-    ![](images/wt_dropout_train.PNG)  
-</details>
-<details> 
-  <summary>Without dropout</summary>
-    ![](images/without_dropout_train.PNG)  
-</details>
+![Truth image](images/dp_truth_image_train.PNG)  
+![With dropout](images/wt_dropout_train.PNG)  
+![Without dropout](images/without_dropout_train.PNG)  
+
 ### Preliminary results
+#### First wave
 * Loss functions:  
-    <details> 
-    <summary>All loss functions</summary>
-        ![](images/loss_f.PNG)
-    </details>
+  ![](images/loss_f.PNG)
+
 * Sample images unseen (always generated then true pictures)
-    <details>
-      <summary>First sample</summary>
-        ![](images/sample1_fake.PNG)
-        ![](images/true_image1.PNG)
-    </details>
-    <details>
-      <summary>Second sample</summary>
-        ![](images/sample2_fake.PNG)
-        ![](images/true_image2.PNG)
-    </details>
-    <details>
-      <summary>Third sample</summary>
-        ![](images/sample3_fake.PNG)
-        ![](images/true_image3.PNG)
-    </details>
-    <details>
-      <summary>Fourth sample</summary>
-      ![](images/more_examples.jpeg)
-    </details>
-    <details>
-      <summary>Fifth sample</summary>
-        ![](images/sample4_fake.PNG)
-        ![](images/true_image4.PNG)
-    </details>
+1. First sample
+  ![](images/sample1_fake.PNG)
+  ![](images/true_image1.PNG)
+2. Second sample
+  ![](images/sample2_fake.PNG)
+  ![](images/true_image2.PNG)
+3. Third sample
+  ![](images/sample3_fake.PNG)
+  ![](images/true_image3.PNG)
+4. Fourth sample
+  ![](images/sample4_fake.PNG)
+  ![](images/true_image4.PNG)
+
+#### Second wave
+I am aggresively turning on dropout, it really seems to overfit my training set:  
+![](new_running_experiment.PNG)
+![](new_running_experiment2.PNG)
+![](new_running_experiment3.PNG)  
+and the true image, to see the difference
+![](new_running_experiment3_true.PNG)
 
 I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
  
-# Clame
-* I write as I think, and my english is far from perfect, sorry if reading this is hurting your eyes.  
-* Contribute or ask questions in _Issues_, if you want :)
+# Side notes
 * TfRecord files are quite large, but I can share them.  
 
 # RoadMap
@@ -237,7 +178,7 @@ I observed that it's harder for the model to fill images when the background is 
 - [ ] Reduce learning rate before overfitting
 - [X] Add decaying dropout to the training
 - [ ] Is DRAW outdated based on GAN recent results... DRAW architecture were every iteration is condition on previous generated images + new caption?
-- [ ] Better data augmentation
+- [X] Better data augmentation
 - [ ] Make GAN works, whether WGAN or classical ones
 - [ ] Refactor the code
 - [ ] Try to generate "HD" images, like in StackGAN (need to retrieve from MS-COCO for supervised learning)
