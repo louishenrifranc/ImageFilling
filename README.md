@@ -162,11 +162,11 @@ However, I think it helps the model to not overfit on the training set, as you c
 
 #### Second wave
 I am aggresively turning on dropout, it really seems to overfit my training set:  
-![](new_running_experiment.PNG)
-![](new_running_experiment2.PNG)
-![](new_running_experiment3.PNG)  
+![](images/new_running_experiment.PNG)
+![](images/new_running_experiment2.PNG)
+![](images/new_running_experiment3.PNG)  
 and the true image, to see the difference
-![](new_running_experiment3_true.PNG)
+![](images/new_running_experiment3_true.PNG)
 
 I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
  
