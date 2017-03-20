@@ -86,7 +86,7 @@ class Graph:
             if reuse_variables:
                 scope.reuse_variables()
 
-            images = ly.dropout(images, keep_prob=0.85, is_training=self.is_training)
+            images = ly.dropout(images, keep_prob=0.7, is_training=self.is_training)
             # Encode image
             # 32 * 32 * 64
             node1 = tf_utils.cust_conv2d(images, 64, h_f=4, w_f=4, batch_norm=False, scope_name="node1")
@@ -98,7 +98,7 @@ class Graph:
             node1 = tf_utils.cust_conv2d(node1, 512, h_f=4, w_f=4, activation_fn=None, is_training=self.is_training,
                                          scope_name="node1_3")
             
-            node1 = ly.dropout(node1, keep_prob=0.6, is_training=self.is_training)
+            node1 = ly.dropout(node1, keep_prob=0.5, is_training=self.is_training)
             
             # 4 * 4 * 128
             node2 = tf_utils.cust_conv2d(node1, 256, h_f=1, w_f=1, h_s=1, w_s=1, is_training=self.is_training,
@@ -109,7 +109,7 @@ class Graph:
             # 4 * 4 * 512
             node2 = tf_utils.cust_conv2d(node2, 512, h_f=3, w_f=3, h_s=1, w_s=1, activation_fn=None,
                                          is_training=self.is_training, scope_name="node2_3")
-            node2 = ly.dropout(node2, keep_prob=0.6, is_training=self.is_training)
+            node2 = ly.dropout(node2, keep_prob=0.5, is_training=self.is_training)
             # 4 * 4 * 512
             node = tf.add(node1, node2)
             node = tf_utils.leaky_rectify(node)
@@ -271,9 +271,9 @@ class Graph:
         Helper to add summaries
         :return:
         """
-        # trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        # for var in trainable_variable:
-        #     tf.summary.histogram(var.op.name, var)
+        trainable_variable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        for var in trainable_variable:
+            tf.summary.histogram(var.op.name, var)
 
         # Add summaries for images
         num_images = self.batch_size

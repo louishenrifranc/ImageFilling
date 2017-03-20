@@ -95,11 +95,11 @@ The average of all captions is then passed into a fully connected, which output 
 ### 1. Architecture
 I did a pretty deep neural network (~30 layers), but it's basically a encoder-decoder with a lot of residual blocks in the decoder. I didn't use anything special between the encoder and the encoder, some people are using channel wise, I think passing the channel is better. The embedding is stacked on top of convolution channels (4x4x512 + 4x4x100). An embedding is replicated in all 4x4 dimensions. 
 Code is in ```model.py```  
-* Recently, I also try a deeper model, with more convolution at the end of the reconstruction, but it was a failure. Image generated were blurry
+* Recently, I also try a deeper model, with more convolution at the end of the reconstruction, but it was a failure. Image generated were blurry. 
 
 #### Side notes on why my first model is performing the best
-I am really amazed by my first training model. It had some flaws in its code, but it is still my best model so far.  (For example, all pixels were in [0, 1])  
-One reason that could explain how well it performed is because I slowly introduced more and more sample starting with a 5.000 sample, up to 83.000 now. I never get good results when I started a new model, with all the sample at the beginning.  
+First model was the best, eventhough it had some flaws in its code.  (For example, all pixels were in [0, 1])  
+One reason that could explain how well it performed is because I slowly introduced more and more sample starting with a 5.000 sample, up to 83.000 now.  
 Moreover the introduction of dropout in the middle, really helped the model to learn better reconstruction features, which leads better looking alike generated images.  
 My new experiences consists in lowering the keep probability of dropout, and slowly introducing an adversarial loss.  
 
@@ -110,6 +110,10 @@ My new experiences consists in lowering the keep probability of dropout, and slo
 
 ### 2. Loss function
 Classic L2 loss, but for smoothness in the border, I encourage more pixel at the frontier to be closed the truth. When seeing the images generated, I saw the difference of this trick: it really remove the effect of a squared block append on top of the image, which is pretty cool
+
+* Recently, I tried ![total variation denoising](https://en.wikipedia.org/wiki/Total_variation_denoising) on a new model without success. I think it is more usefull as a fine-tuning loss functions for an already trained model.
+
+* Starting L1 loss for sparsity.
 
 ### 3. Adversarial cost
 There are out two papers who claimed to remove the blurriness in generated images.
@@ -160,6 +164,8 @@ However, I think it helps the model to not overfit on the training set, as you c
   ![](images/sample4_fake.PNG)
   ![](images/true_image4.PNG)
 
+I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
+
 #### Second wave
 I am aggresively turning on dropout, it really seems to overfit my training set:  
 ![](images/new_running_experiment.PNG)
@@ -167,11 +173,6 @@ I am aggresively turning on dropout, it really seems to overfit my training set:
 ![](images/new_running_experiment3.PNG)  
 and the true image, to see the difference
 ![](images/new_running_experiment3_true.PNG)
-
-I observed that it's harder for the model to fill images when the background is very blurry in its nature, like vegetation.  
- 
-# Side notes
-* TfRecord files are quite large, but I can share them.  
 
 # RoadMap
 - [X] Finish generating embeddings
@@ -181,5 +182,5 @@ I observed that it's harder for the model to fill images when the background is 
 - [X] Better data augmentation
 - [ ] Make GAN works, whether WGAN or classical ones
 - [ ] Refactor the code
-- [ ] Try to generate "HD" images, like in StackGAN (need to retrieve from MS-COCO for supervised learning)
-
+- [X] Try to generate "HD" images, like in StackGAN (need to retrieve from MS-COCO for supervised learning)
+- [ ] Used ideas from there: [](https://ppaquette.github.io/)
