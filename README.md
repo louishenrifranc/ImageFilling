@@ -1,4 +1,4 @@
-# State of my art results:
+# State of my neural network art results:
 ## Training set
 ![](images/new_running_experiment.PNG)
 ![](images/new_running_experiment2.PNG)
