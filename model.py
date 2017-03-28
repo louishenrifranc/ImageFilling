@@ -19,6 +19,14 @@ class Graph:
         # Global step
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
 
+        self.decay_l2_loss = tf.train.exponential_decay(1.0, self.global_step,
+                                                        20000, 0.95, staircase=True)
+
+        self.dropout_ratio = tf.train.exponential_decay(1.0, self.global_step,
+                                                        20000, 0.95, staircase=True)
+
+        # self.learning_rate = tf.train.exponential_decay(0.0001, self.global_step,
+        #                                                 20000, 0.98, staircase=True)
         # Input filename
         self.cfg = args
         self.sess = tf.Session()
@@ -26,6 +34,7 @@ class Graph:
     def _inputs(self):
         input_to_graph = helper.create_queue(self.cfg.queue.filename, self.batch_size)
         if self.cfg.queue.is_val_set:
+            # TODO: not implemented + using tf.cond is bad
             test_queue = helper.create_queue("val", self.batch_size)
             input_to_graph = tf.cond(self.is_training, lambda: input_to_graph, lambda: test_queue)
 
@@ -86,7 +95,7 @@ class Graph:
             if reuse_variables:
                 scope.reuse_variables()
 
-            images = ly.dropout(images, keep_prob=0.7, is_training=self.is_training)
+            # images = ly.dropout(images, keep_prob=self.dropout_ratio, is_training=self.is_training)
             # Encode image
             # 32 * 32 * 64
             node1 = tf_utils.cust_conv2d(images, 64, h_f=4, w_f=4, batch_norm=False, scope_name="node1")
@@ -97,9 +106,9 @@ class Graph:
             # 4 * 4 * 512
             node1 = tf_utils.cust_conv2d(node1, 512, h_f=4, w_f=4, activation_fn=None, is_training=self.is_training,
                                          scope_name="node1_3")
-            
-            node1 = ly.dropout(node1, keep_prob=0.5, is_training=self.is_training)
-            
+
+            # node1 = ly.dropout(node1, keep_prob=self.dropout_ratio, is_training=self.is_training)
+
             # 4 * 4 * 128
             node2 = tf_utils.cust_conv2d(node1, 256, h_f=1, w_f=1, h_s=1, w_s=1, is_training=self.is_training,
                                          scope_name="node2_1")
@@ -109,8 +118,8 @@ class Graph:
             # 4 * 4 * 512
             node2 = tf_utils.cust_conv2d(node2, 512, h_f=3, w_f=3, h_s=1, w_s=1, activation_fn=None,
                                          is_training=self.is_training, scope_name="node2_3")
-            
-            node2 = ly.dropout(node2, keep_prob=0.5, is_training=self.is_training)
+
+            # node2 = ly.dropout(node2, keep_prob=self.dropout_ratio, is_training=self.is_training)
             # 4 * 4 * 512
             node = tf.add(node1, node2)
             node = tf_utils.leaky_rectify(node)
@@ -130,6 +139,9 @@ class Graph:
             result = tf_utils.cust_conv2d(result, 256, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node4")
             if scope_name == "discriminator":
                 result = tf_utils.cust_conv2d(result, 128, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node5")
+                # result = tf_utils.cust_conv2d(result, 64, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node6")
+
+                # result = tf_utils.cust_conv2d(result, 1, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node7")
             return result
 
     def _decoder(self, input, scope_name="decoder"):
@@ -217,14 +229,27 @@ class Graph:
 
         train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.gen_variables = [v for v in train_variables if not v.name.startswith("discriminator")]
+        from pprint import pprint
+        pprint([var.op.name for var in self.gen_variables])
+
         self.dis_variables = [v for v in train_variables if v.name.startswith("discriminator")]
+        pprint([var.op.name for var in self.dis_variables])
 
-        self.dis_loss = tf.reduce_mean(wrong_logit + fake_logit - real_logit)
-        self.gen_loss = tf.reduce_mean(-fake_logit - wrong_logit)
+        real_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logit,
+                                                                            labels=tf.ones_like(real_logit)))
+        wrong_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=wrong_logit,
+                                                                             labels=tf.zeros_like(wrong_logit)))
 
-        self.all_loss_G = self.gen_loss * 0.1 + (self.kl_loss + self._loss_recon_center
-                                                 + self._loss_recon_overlap) * 0.9
-        self.all_loss_D = self.dis_loss * 0.1
+        fake_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logit,
+                                                                            labels=tf.zeros_like(fake_logit)))
+        self.dis_loss = real_dloss + (wrong_dloss + fake_dloss) / 2
+
+        self.gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logit,
+                                                                               labels=tf.ones_like(fake_logit)))
+
+        self.all_loss_G = 10 * self.gen_loss * (1 - self.decay_l2_loss) + (self.kl_loss + self._loss_recon_center
+                                                                           + self._loss_recon_overlap) * self.decay_l2_loss
+        self.all_loss_D = 10 * self.dis_loss
 
         W_G = filter(lambda x: x.name.endswith('weights:0'), self.gen_variables)
         W_D = filter(lambda x: x.name.endswith('weights:0'), self.dis_variables)
@@ -326,5 +351,6 @@ class Graph:
         self.batch_size = num_images
         _, summary_str = self.sess.run([self.generated_image, self.merged_summary_op],
                                        feed_dict={self.is_training: False})
+        
         self.summary_writer.add_summary(summary_str)
         self.summary_writer.flush()

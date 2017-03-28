@@ -5,13 +5,13 @@ from argparse import ArgumentParser
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--train_first_file", type=int, default=0, help="Number of the first training file")
-    parser.add_argument("--train_set_size", type=int, default=82000, help="Number of training examples")
+    parser.add_argument("--train_first_file", type=int, default=1, help="Number of the first training file")
+    parser.add_argument("--train_set_size", type=int, default=1000, help="Number of training examples")
     parser.add_argument("--val_set", type=bool, default=False, help="Whether to use a validation set")
     parser.add_argument("--batch_size", type=int, default=16, help="Size of a batch")
     parser.add_argument("--train_adversarial", type=bool, default=False,
                         help="Whether to train the model adding an adversarial cost")
-    parser.add_argument("--train", action="store_true", default=True,
+    parser.add_argument("--train", action="store_true", default=False,
                         help="If the model should be trained")
 
     args = parser.parse_args()
@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     # Training files name
     cfg.queue.filename = [
-        os.path.join(os.path.dirname(os.path.basename(__file__)), "examples", "train{}.tfrecords").format(index)
+        os.path.join(os.path.dirname(os.path.basename(__file__)), "examples", "val{}.tfrecords").format(index)
         for index in range(args.train_first_file,
                            args.train_first_file +
                            args.train_set_size //
