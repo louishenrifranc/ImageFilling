@@ -83,7 +83,7 @@ def read_and_decode(filename_queue,
 if __name__ == '__main__':
 
     # Number of different captions to plot
-    number_of_examples = 6000
+    number_of_examples = 200
 
     # !!! IMPORTANT !!!
     # Not cross-OS function. File are not ordered in the same way between Linux and Windows

@@ -71,7 +71,7 @@ class Graph:
         self.z_vec = self._encoder(self.true_image, self.z)
 
         # Decode the image
-        self.reconstructed_hole = self._decoder(self.z_vec)
+        self.reconstructed_hole = tf.stop_gradient(self._decoder(self.z_vec), name="gradient_stop")
         self.generated_image = helper.reconstructed_image(self.reconstructed_hole, self.true_image)
         self._losses()
         self._adversarial_loss()
@@ -139,9 +139,6 @@ class Graph:
             result = tf_utils.cust_conv2d(result, 256, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node4")
             if scope_name == "discriminator":
                 result = tf_utils.cust_conv2d(result, 128, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node5")
-                # result = tf_utils.cust_conv2d(result, 64, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node6")
-
-                # result = tf_utils.cust_conv2d(result, 1, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node7")
             return result
 
     def _decoder(self, input, scope_name="decoder"):
@@ -235,21 +232,12 @@ class Graph:
         self.dis_variables = [v for v in train_variables if v.name.startswith("discriminator")]
         pprint([var.op.name for var in self.dis_variables])
 
-        real_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logit,
-                                                                            labels=tf.ones_like(real_logit)))
-        wrong_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=wrong_logit,
-                                                                             labels=tf.zeros_like(wrong_logit)))
+        self.dis_loss = tf.reduce_mean(1 / 2 * (wrong_logit + fake_logit) - real_logit)
+        self.gen_loss = tf.reduce_mean(1 / 2 * (wrong_logit + fake_logit))
+        self.all_loss_G = self.gen_loss * (1 - self.decay_l2_loss) + (self.kl_loss + self._loss_recon_center
+                                                                      + self._loss_recon_overlap) * self.decay_l2_loss
 
-        fake_dloss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logit,
-                                                                            labels=tf.zeros_like(fake_logit)))
-        self.dis_loss = real_dloss + (wrong_dloss + fake_dloss) / 2
-
-        self.gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logit,
-                                                                               labels=tf.ones_like(fake_logit)))
-
-        self.all_loss_G = 10 * self.gen_loss * (1 - self.decay_l2_loss) + (self.kl_loss + self._loss_recon_center
-                                                                           + self._loss_recon_overlap) * self.decay_l2_loss
-        self.all_loss_D = 10 * self.dis_loss
+        self.all_loss_D = self.dis_loss
 
         W_G = filter(lambda x: x.name.endswith('weights:0'), self.gen_variables)
         W_D = filter(lambda x: x.name.endswith('weights:0'), self.dis_variables)
@@ -261,9 +249,9 @@ class Graph:
         grads_var_dis = map(lambda gv: [tf.clip_by_value(gv[0], -0.1, 0.1), gv[1]], grads_var_dis)
         self.train_dis = self.optimizer.apply_gradients(grads_var_dis, global_step=self.global_step)
 
-        grads_var_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
-        grads_var_gen = map(lambda gv: [tf.clip_by_value(gv[0], -10., 10.), gv[1]], grads_var_gen)
-        self.train_gen = self.optimizer.apply_gradients(grads_var_gen, global_step=self.global_step)
+        # grads_var_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
+        # grads_var_gen = map(lambda gv: [tf.clip_by_value(gv[0], -10., 10.), gv[1]], grads_var_gen)
+        # self.train_gen = self.optimizer.apply_gradients(grads_var_gen, global_step=self.global_step)
 
     def _losses(self):
         # KL loss
@@ -351,6 +339,6 @@ class Graph:
         self.batch_size = num_images
         _, summary_str = self.sess.run([self.generated_image, self.merged_summary_op],
                                        feed_dict={self.is_training: False})
-        
+
         self.summary_writer.add_summary(summary_str)
         self.summary_writer.flush()

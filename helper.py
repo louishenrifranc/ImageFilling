@@ -202,9 +202,10 @@ def train_epoch(model, saving_each_iter=10):
 
 def train_adversarial_epoch(model, saving_each_iter=100):
     nb_train_iter = (len(model.cfg.queue.filename) * model.cfg.queue.nb_examples_per_file) // model.batch_size
+    print(nb_train_iter)
     for i in trange(nb_train_iter, leave=False, desc="Training iteration"):
-        op = model.train_gen
-        model.sess.run(op, feed_dict={model.is_training: True})
+        # op = model.train_gen
+        # model.sess.run(op, feed_dict={model.is_training: True})
 
         op = [model.train_dis]
         if i % saving_each_iter == 0:
