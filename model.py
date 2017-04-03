@@ -12,9 +12,9 @@ class Graph:
 
         self.adv_training = args.gan.train_adversarial
 
-        self.optimizer = args.train.optimizer
         # Placeholder
-        self.is_training = tf.placeholder(tf.bool)
+        self.is_training = tf.placeholder(tf.bool, name="is_training")
+        self.do_deconv = tf.placeholder_with_default(True, (), name="do_deconv")
 
         # Global step
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
@@ -23,10 +23,12 @@ class Graph:
                                                         20000, 0.95, staircase=True)
 
         self.dropout_ratio = tf.train.exponential_decay(1.0, self.global_step,
-                                                        20000, 0.95, staircase=True)
+                                                        30000, 0.95, staircase=True)
 
-        # self.learning_rate = tf.train.exponential_decay(0.0001, self.global_step,
-        #                                                 20000, 0.98, staircase=True)
+        self.learning_rate = tf.train.exponential_decay(0.0001, self.global_step,
+                                                        20000, 0.98, staircase=True)
+        self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+
         # Input filename
         self.cfg = args
         self.sess = tf.Session()
@@ -68,10 +70,10 @@ class Graph:
         self.z = helper.sample(self._mean, self._log_sigma)
 
         # Encode the image
-        self.z_vec = self._encoder(self.true_image, self.z)
+        self.z_vec = self._encoder(self.cropped_image, self.z)
 
         # Decode the image
-        self.reconstructed_hole = tf.stop_gradient(self._decoder(self.z_vec), name="gradient_stop")
+        self.reconstructed_hole = self._decoder(self.z_vec)
         self.generated_image = helper.reconstructed_image(self.reconstructed_hole, self.true_image)
         self._losses()
         self._adversarial_loss()
@@ -95,7 +97,7 @@ class Graph:
             if reuse_variables:
                 scope.reuse_variables()
 
-            # images = ly.dropout(images, keep_prob=self.dropout_ratio, is_training=self.is_training)
+            images = ly.dropout(images, keep_prob=self.dropout_ratio, is_training=self.is_training)
             # Encode image
             # 32 * 32 * 64
             node1 = tf_utils.cust_conv2d(images, 64, h_f=4, w_f=4, batch_norm=False, scope_name="node1")
@@ -107,7 +109,7 @@ class Graph:
             node1 = tf_utils.cust_conv2d(node1, 512, h_f=4, w_f=4, activation_fn=None, is_training=self.is_training,
                                          scope_name="node1_3")
 
-            # node1 = ly.dropout(node1, keep_prob=self.dropout_ratio, is_training=self.is_training)
+            node1 = ly.dropout(node1, keep_prob=self.dropout_ratio, is_training=self.is_training)
 
             # 4 * 4 * 128
             node2 = tf_utils.cust_conv2d(node1, 256, h_f=1, w_f=1, h_s=1, w_s=1, is_training=self.is_training,
@@ -119,7 +121,7 @@ class Graph:
             node2 = tf_utils.cust_conv2d(node2, 512, h_f=3, w_f=3, h_s=1, w_s=1, activation_fn=None,
                                          is_training=self.is_training, scope_name="node2_3")
 
-            # node2 = ly.dropout(node2, keep_prob=self.dropout_ratio, is_training=self.is_training)
+            node2 = ly.dropout(node2, keep_prob=self.dropout_ratio, is_training=self.is_training)
             # 4 * 4 * 512
             node = tf.add(node1, node2)
             node = tf_utils.leaky_rectify(node)
@@ -139,6 +141,8 @@ class Graph:
             result = tf_utils.cust_conv2d(result, 256, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node4")
             if scope_name == "discriminator":
                 result = tf_utils.cust_conv2d(result, 128, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node5")
+                result = tf_utils.cust_conv2d(result, 64, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node6")
+                result = tf_utils.cust_conv2d(result, 1, h_f=3, w_f=3, w_s=1, h_s=1, scope_name="node7")
             return result
 
     def _decoder(self, input, scope_name="decoder"):
@@ -162,8 +166,10 @@ class Graph:
 
             # Node 1
             # 8 * 8 * 64
-            node1_0 = tf_utils.cust_conv2d_transpose(node1, 128, w_s=2, h_s=2, is_training=self.is_training,
+            node1_0 = tf.image.resize_nearest_neighbor(node1, [8, 8])
+            node1_0 = tf_utils.cust_conv2d_transpose(node1_0, 128, w_s=1, h_s=1, is_training=self.is_training,
                                                      scope_name="node1_0")
+            # node1_0 = tf.cond(self.do_deconv, lambda: deconvolution1_0, lambda: nearest_neighbors1_0)
             # 8 * 8 * 32
             node1_1 = tf_utils.cust_conv2d(node1_0, 64, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node1_1")
@@ -179,8 +185,10 @@ class Graph:
 
             # Node 2
             # 16 * 16 * 16
-            node2_0 = tf_utils.cust_conv2d_transpose(node2, 64, h_s=2, w_s=2, is_training=self.is_training,
+            node2_0 = tf.image.resize_nearest_neighbor(node2, [16, 16])
+            node2_0 = tf_utils.cust_conv2d_transpose(node2_0, 64, h_s=1, w_s=1, is_training=self.is_training,
                                                      scope_name="node2_1")
+            # node2_0 = tf.cond(self.do_deconv, lambda: deconvolution2_0, lambda: nearest_neigbors2_0)
             # 16 * 16 * 8
             node2_1 = tf_utils.cust_conv2d(node2_0, 32, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node2_2")
@@ -195,8 +203,11 @@ class Graph:
 
             # Node 3
             # 32 x 32 x 8
-            node3_0 = tf_utils.cust_conv2d_transpose(node3, 32, h_s=2, w_s=2, is_training=self.is_training,
+            node3_0 = tf.image.resize_nearest_neighbor(node3, [32, 32])
+            node3_0 = tf_utils.cust_conv2d_transpose(node3_0, 32, h_s=1, w_s=1, is_training=self.is_training,
                                                      scope_name="node3")
+            # node3_0 = tf.cond(self.do_deconv, lambda: deconvolution3_0, lambda: nearest_neigbors3_0)
+
             # 16 * 16 * 8
             node3_1 = tf_utils.cust_conv2d(node3_0, 16, h_f=1, w_f=1, w_s=1, h_s=1, is_training=self.is_training,
                                            scope_name="node3_1")
@@ -249,9 +260,9 @@ class Graph:
         grads_var_dis = map(lambda gv: [tf.clip_by_value(gv[0], -0.1, 0.1), gv[1]], grads_var_dis)
         self.train_dis = self.optimizer.apply_gradients(grads_var_dis, global_step=self.global_step)
 
-        # grads_var_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
-        # grads_var_gen = map(lambda gv: [tf.clip_by_value(gv[0], -10., 10.), gv[1]], grads_var_gen)
-        # self.train_gen = self.optimizer.apply_gradients(grads_var_gen, global_step=self.global_step)
+        grads_var_gen = self.optimizer.compute_gradients(loss=self.gen_loss, var_list=self.gen_variables)
+        grads_var_gen = map(lambda gv: [tf.clip_by_value(gv[0], -10., 10.), gv[1]], grads_var_gen)
+        self.train_gen = self.optimizer.apply_gradients(grads_var_gen, global_step=self.global_step)
 
     def _losses(self):
         # KL loss

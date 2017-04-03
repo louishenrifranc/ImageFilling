@@ -9,7 +9,7 @@ if __name__ == '__main__':
     parser.add_argument("--train_set_size", type=int, default=82000, help="Number of training examples")
     parser.add_argument("--val_set", type=bool, default=False, help="Whether to use a validation set")
     parser.add_argument("--batch_size", type=int, default=16, help="Size of a batch")
-    parser.add_argument("--train_adversarial", type=bool, default=True,
+    parser.add_argument("--train_adversarial", type=bool, default=False,
                         help="Whether to train the model adding an adversarial cost")
     parser.add_argument("--train", action="store_true", default=True,
                         help="If the model should be trained")
